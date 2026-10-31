@@ -29,7 +29,7 @@ export function parseArguments(args: readonly string[]) {
     else if (extraFlags[arg.slice(2)] === 'boolean') values[arg.slice(2)] = true
     else {
       const value = args[++index]
-      if (value === undefined || (arg !== '--command' && value.startsWith('-'))) throw new SshError('USAGE', `A flag value is required. Valid flags: ${flagHelp}.`, 2)
+      if (value === undefined || (arg !== '--command' && (!value || value.startsWith('-')))) throw new SshError('USAGE', `A flag value is required. Valid flags: ${flagHelp}.`, 2)
       if (arg === '--config') config = value
       else if (arg === '--profile') profile = value
       else values[arg.slice(2)] = value
