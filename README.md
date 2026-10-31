@@ -59,8 +59,8 @@ Environment profiles use `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME`, 
 Partial environment profiles fail.
 No SSH config, agent, known-hosts file or ambient key is consulted.
 
-Doctor validates every resolved IP against the configured address set and dials the exact validated IP on each new transport.
-It requires an exact approved server public key before sending authentication credentials.
+Doctor and execution validate every resolved IP against the configured address set and dial the exact validated IP on each new transport.
+Both require an exact approved server public key before sending authentication credentials.
 The authentication deadline is 15 seconds, including resolution and connection setup.
 Doctor requests no SSH channel and closes its socket, probe worker and private directories before returning.
 Private-key buffers are released where supported; JavaScript strings and process termination do not provide a secure-erasure guarantee.
@@ -78,6 +78,8 @@ Known managed secrets and encoded variants are rejected before command journalin
 Native command intents are written durably to `~/.local/state/ssh-axi/writes.log`, or the absolute `XDG_STATE_HOME` override.
 `SSH_AXI_WRITE_LOG` selects an absolute protected journal path.
 No local shell is invoked; the exact command text is sent to the remote SSH exec channel.
+Remote stdin is closed without forwarding input; both output streams continue draining.
+Native Ctrl+C requests cancellation through the private worker.
 
 ```sh
 artium-axi ssh-axi exec lab --command 'systemctl --failed' --confirm --detach
@@ -98,7 +100,7 @@ Ctrl+C requests cancellation of the accepted execution ID.
 
 The default command deadline is 60 seconds, adjustable with `--timeout 1s` through `600s` within host ceilings.
 Both streams are drained, retaining 65536 bytes each by default.
-`--output-limit <bytes>` lowers retention; the absolute administrator ceiling is 1048576 bytes per stream.
+`--output-limit <bytes>` sets retention from 0 through 1048576 bytes per stream, subject to managed host ceilings.
 `--full` never bypasses retention or executes another command.
 More than 16 MiB of combined received output triggers cancellation.
 Results carry separate remote exit/signal, received and retained byte counts, truncation and encoding-loss flags.
