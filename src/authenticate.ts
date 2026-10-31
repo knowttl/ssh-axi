@@ -101,6 +101,7 @@ async function transport(profile: Profile, settings?: ExecutionSettings, signal?
       const deadline = setTimeout(() => finish(new SshError('AUTH_TIMEOUT', 'SSH authentication exceeded 15 seconds.')), AUTHENTICATION_DEADLINE_MS)
       client.on('ready', () => {
         clearTimeout(deadline)
+        privateKey.fill(0)
         if (!settings) { finish(); return }
         if (signal?.aborted) { finish(); return }
         // ssh2 sends these exact bytes to the remote exec channel. No local shell.
