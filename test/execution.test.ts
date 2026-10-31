@@ -28,10 +28,13 @@ test('unused remote stdin reaches EOF while both output streams drain', async ()
   } finally { await server.close() }
 })
 
-test('process-group SIGINT cancels native execution through the private worker', { timeout: 10000 }, async () => {
+test('process-group SIGINT after stdin EOF cancels native execution through the private worker', { timeout: 10000 }, async () => {
   let admitted!: () => void
   const dispatched = new Promise<void>(resolve => { admitted = resolve })
-  const server = await peer(false, '127.0.0.1', 0, () => admitted())
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+    stream.resume()
+    stream.on('end', admitted)
+  })
   const isolated = await temporary()
   const path = await configuration(isolated.root, { fixture: server.profile })
   const child = spawn(process.execPath, ['dist/main.js', 'exec', 'fixture', '--command', settings.command,
@@ -107,25 +110,22 @@ test('UTF-8 chunks decode together and invalid bytes and terminal controls are r
   } finally { await server.close() }
 })
 
-test('deadline signals an ignoring peer then tears down locally with unknown termination', async context => {
-  let admitted!: () => void
-  const dispatched = new Promise<void>(resolve => { admitted = resolve })
-  const server = await peer(false, '127.0.0.1', 0, () => admitted())
-  context.mock.timers.enable({ apis: ['setTimeout'] })
+test('deadline after stdin EOF signals an ignoring peer then tears down locally with unknown termination', { timeout: 10000 }, async () => {
+  let stdinClosed = false
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+    stream.resume()
+    stream.on('end', () => { stdinClosed = true })
+  })
   try {
-    const pending = execute(server.profile, { ...settings, timeout: 1 })
-    await dispatched
-    context.mock.timers.tick(1000)
-    await server.signalled
-    context.mock.timers.tick(200)
-    const result = await pending
+    const result = await execute(server.profile, { ...settings, timeout: 1 })
     await server.disconnected
+    assert.equal(stdinClosed, true)
     assert.equal(result.outcome, 'timed_out')
     assert.equal(result.termination, 'unknown')
     assert.equal(result.remoteExit, null)
     assert.deepEqual(server.observations.signals, ['TERM'])
     assert.equal(server.observations.closed, 1)
-  } finally { context.mock.timers.reset(); await server.close() }
+  } finally { await server.close() }
 })
 
 test('explicit cancellation closes an ignoring peer and preserves non-success', async () => {

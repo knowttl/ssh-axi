@@ -43,6 +43,9 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0, execu
     client.on('session', accept => {
       observations.channels++
       const session = accept()
+      // ssh2's server marks the session ended on stdin EOF and drops later
+      // requests. Model SSH half-close: signals remain valid until close.
+      session.on('eof', () => { (session as ssh2.Session & { _ending: boolean })._ending = false })
       session.on('signal', (_accept, _reject, info) => { observations.signals.push(info.name); observedSignal() })
       session.on('exec', (accept, reject, info) => {
         observations.commands++; observations.commandBytes.push(info.command)

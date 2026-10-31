@@ -57,11 +57,23 @@ async function transport(profile: Profile, settings?: ExecutionSettings, signal?
       const started = performance.now()
       const stdout = new Output(patterns, settings?.outputLimit ?? 0)
       const stderr = new Output(patterns, settings?.outputLimit ?? 0)
+      const terminate = () => {
+        if (!channel) return
+        // ssh2 1.17's signal() refuses requests after stdin EOF, although SSH
+        // channel requests remain valid until close. Keep stdin closed.
+        const transport = channel as ssh2.ClientChannel & {
+          outgoing: { id: number, state: string }
+          _client: { _protocol: { signal(channel: number, name: string): void } }
+        }
+        if (transport.outgoing.state === 'open' || transport.outgoing.state === 'eof') {
+          transport._client._protocol.signal(transport.outgoing.id, 'TERM')
+        }
+      }
       const cancel = (reason: 'cancelled' | 'timed_out' | 'unknown', message?: string) => {
         if (finished || grace) return
         outcome = reason
         diagnostic = message
-        channel?.signal('TERM')
+        terminate()
         grace = setTimeout(() => { channel?.close(); finish() }, 200)
       }
       const abort = () => cancel('cancelled')
@@ -111,7 +123,7 @@ async function transport(profile: Profile, settings?: ExecutionSettings, signal?
           if (finished) { stream?.destroy(); return }
           if (error) { outcome = 'failed'; finish(); return }
           channel = stream
-          if (grace) stream.signal('TERM')
+          if (grace) terminate()
           const receive = (output: Output, bytes: Buffer) => {
             output.push(bytes)
             if (stdout.receivedBytes + stderr.receivedBytes > 16 * 1024 * 1024) cancel('unknown', 'Output flood limit exceeded; inspect remote state before retrying.')
