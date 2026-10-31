@@ -25,10 +25,10 @@ before(async () => {
   await writeFile(join(prefix, 'package.json'), '{"private":true}')
   const install = await run(process.execPath, [pnpm, '--dir', prefix, '--store-dir', join(process.env.HOME!, '.local/share/pnpm/store'), 'add', '--offline', tarball], process.env)
   assert.equal(install.code, 0, install.stdout + install.stderr)
-  executable = join(prefix, 'node_modules', '@knowttl', 'ssh-axi', 'dist', 'main.js')
+  executable = join(prefix, 'node_modules', '.bin', 'ssh-axi')
 })
 after(() => scratch.close())
-const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => run(process.execPath, [executable, ...args], { ...environment, ...extra })
+const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => run(executable, args, { ...environment, ...extra })
 
 test('an installed package discovers its offline empty state in both formats', async () => {
   const json = await cli(['host', 'list', '--json'])
