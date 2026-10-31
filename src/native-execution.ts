@@ -6,7 +6,7 @@ import { executeCommand } from './doctor.js'
 import { checkCommand } from './output.js'
 import { readPrivateFile, resolveSecret, type Profile } from './profile.js'
 import { SshError } from './errors.js'
-import type { parseArguments } from './cli.js'
+import type { parseArguments } from './arguments.js'
 
 export async function executeNative(host: string, profile: Profile, parsed: ReturnType<typeof parseArguments>) {
   if (parsed.values.confirm !== true) throw new SshError('CONFIRM_REQUIRED', 'Every arbitrary command requires --confirm.', 2)

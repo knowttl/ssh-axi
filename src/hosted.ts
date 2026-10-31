@@ -1,5 +1,5 @@
 import { encode } from '@toon-format/toon'
-import { parseArguments } from './cli.js'
+import { parseArguments } from './arguments.js'
 import { configPath, loadConfiguration, selectProfile } from './profile.js'
 import { doctor, executeCommand } from './doctor.js'
 import type { ExecutionSettings } from './authenticate.js'
