@@ -12,5 +12,5 @@ const loopback = spawnSync('ip', ['link', 'set', 'lo', 'up'], { stdio: 'inherit'
 if (loopback.status !== 0) process.exit(1)
 const privateTmp = spawnSync('mount', ['-t', 'tmpfs', '-o', 'mode=1777', 'tmpfs', '/tmp'], { stdio: 'inherit' })
 if (privateTmp.status !== 0) process.exit(1)
-const tests = spawnSync(process.execPath, ['--test', 'test/native.test.ts', 'test/authentication.test.ts', 'test/artium.test.ts'], { stdio: 'inherit' })
+const tests = spawnSync(process.execPath, ['--test', 'test/native.test.ts', 'test/authentication.test.ts', 'test/execution.test.ts', 'test/artium.test.ts'], { stdio: 'inherit' })
 process.exit(tests.status ?? 1)

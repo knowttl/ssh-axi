@@ -137,3 +137,43 @@ for (const fixture of matrix) test(`installed doctor: ${fixture.case}`, async ()
     assert.doesNotMatch(result.stdout + result.stderr, /CANARY|PRIVATE KEY|TEST_PRIVATE_KEY/)
   } finally { await server.close(); await isolated.close() }
 })
+
+test('installed exec preserves command bytes, separate streams and exit 7 without a local shell', async () => {
+  const command = `printf '%s' 'quoted " value' | cat > /never-created-by-local-shell; exit 7`
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+    stream.write('remote stdout\n'); stream.stderr.write('remote stderr\n'); stream.exit(7); stream.end()
+  })
+  const isolated = await temporary()
+  try {
+    const path = await configuration(isolated.root, { fixture: server.profile })
+    const result = await cli(['exec', 'fixture', '--command', command, '--confirm', '--config', path, '--json'], { XDG_STATE_HOME: isolated.root })
+    assert.equal(result.code, 7, result.stdout + result.stderr)
+    const value = JSON.parse(result.stdout)
+    assert.equal(value.stdout.text, 'remote stdout\n')
+    assert.equal(value.stderr.text, 'remote stderr\n')
+    assert.equal(value.remoteExit, 7)
+    assert.equal(value.outcome, 'failed')
+    assert.deepEqual(server.observations.commandBytes, [command])
+    const journal = await readFile(join(isolated.root, 'ssh-axi', 'writes.log'), 'utf8')
+    assert.equal(JSON.parse(journal).command, command)
+    assert.equal(JSON.parse(journal).id, value.id)
+  } finally { await server.close(); await isolated.close() }
+})
+
+test('confirmation, read-only policy and secret command refusal occur before journal and transport', async () => {
+  const server = await peer()
+  const isolated = await temporary()
+  try {
+    const path = await configuration(isolated.root, { fixture: server.profile })
+    const base = ['exec', 'fixture', '--config', path, '--json']
+    const missing = await cli([...base, '--command', 'ls'], { XDG_STATE_HOME: isolated.root })
+    assert.equal(JSON.parse(missing.stdout).error.code, 'CONFIRM_REQUIRED')
+    const readOnly = await cli([...base, '--command', 'ls', '--confirm'], { XDG_STATE_HOME: isolated.root, SSH_AXI_READ_ONLY: 'true' })
+    assert.equal(JSON.parse(readOnly.stdout).error.code, 'READ_ONLY')
+    const secret = await cli([...base, '--command', `echo ${Buffer.from(passphrase).toString('base64')}`, '--confirm'], { XDG_STATE_HOME: isolated.root })
+    assert.equal(JSON.parse(secret.stdout).error.code, 'SECRET_IN_COMMAND')
+    assert.doesNotMatch(secret.stdout + secret.stderr, /CANARY/)
+    assert.equal(server.observations.transports, 0)
+    await assert.rejects(readFile(join(isolated.root, 'ssh-axi', 'writes.log')), { code: 'ENOENT' })
+  } finally { await server.close(); await isolated.close() }
+})

@@ -63,6 +63,52 @@
         "json": "boolean"
       },
       "effect": "read"
+    },
+    {
+      "command": "exec",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "command": "string",
+        "confirm": "boolean",
+        "timeout": "string",
+        "output-limit": "string",
+        "detach": "boolean",
+        "request-key": "string",
+        "sudo": "boolean"
+      },
+      "effect": "write"
+    },
+    {
+      "command": "execution list",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "execution show",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "request-key": "string",
+        "full": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "execution cancel",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "confirm": "boolean"
+      },
+      "effect": "write"
     }
   ]
 }
