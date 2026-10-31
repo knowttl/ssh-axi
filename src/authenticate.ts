@@ -127,6 +127,7 @@ async function transport(profile: Profile, settings?: ExecutionSettings, signal?
             if (!grace) outcome = remoteExit === 0 ? 'completed' : remoteExit !== null || remoteSignal ? 'failed' : 'unknown'
             finish()
           })
+          stream.end()
         })
       })
       client.on('error', () => finish(new SshError(trusted ? 'AUTH_FAILED' : 'TRUST_FAILED',

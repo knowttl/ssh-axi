@@ -31,7 +31,7 @@ async function supervise(profile: Profile, settings?: ExecutionSettings, signal?
       ARTIUM_SECRET_0: privateKey, ...(passphrase === undefined ? {} : { ARTIUM_SECRET_1: passphrase }) }
     return await new Promise((resolve, reject) => {
       const child = fork(new URL('./worker.js', import.meta.url), [], { env: environment,
-        execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
+        execArgv: [], detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
       let response: unknown
       const deadline = setTimeout(() => child.kill('SIGKILL'), 17_000 + (settings?.timeout ?? 0) * 1000)
       const cancel = () => { if (child.connected) child.send({ cancel: true }) }

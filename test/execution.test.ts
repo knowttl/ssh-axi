@@ -1,12 +1,63 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { join } from 'node:path'
 import { execute } from '../dist/authenticate.js'
 import { executeCommand } from '../dist/doctor.js'
-import { peer, privateKey, passphrase } from './support.ts'
+import { configuration, peer, privateKey, passphrase, temporary } from './support.ts'
 
 process.env.TEST_PRIVATE_KEY = privateKey
 process.env.TEST_PASSPHRASE = passphrase
 const settings = { command: 'synthetic command', timeout: 60, outputLimit: 65536 }
+
+test('unused remote stdin reaches EOF while both output streams drain', async () => {
+  let received = 0
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+    stream.on('data', (bytes: Buffer) => { received += bytes.length })
+    stream.on('end', () => {
+      stream.write(String(received)); stream.stderr.write('stdin closed'); stream.exit(0); stream.end()
+    })
+  })
+  try {
+    const result = await executeCommand(server.profile, { ...settings, timeout: 1 })
+    assert.equal(result.outcome, 'completed')
+    assert.equal(result.remoteExit, 0)
+    assert.equal(result.stdout.text, '0')
+    assert.equal(result.stderr.text, 'stdin closed')
+  } finally { await server.close() }
+})
+
+test('process-group SIGINT cancels native execution through the private worker', { timeout: 10000 }, async () => {
+  let admitted!: () => void
+  const dispatched = new Promise<void>(resolve => { admitted = resolve })
+  const server = await peer(false, '127.0.0.1', 0, () => admitted())
+  const isolated = await temporary()
+  const path = await configuration(isolated.root, { fixture: server.profile })
+  const child = spawn(process.execPath, ['dist/main.js', 'exec', 'fixture', '--command', settings.command,
+    '--confirm', '--config', path, '--json'], {
+    detached: true,
+    env: { ...process.env, XDG_STATE_HOME: isolated.root },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', chunk => { stdout += String(chunk) })
+  child.stderr.on('data', chunk => { stderr += String(chunk) })
+  const closed = once(child, 'close')
+  try {
+    await dispatched
+    process.kill(-child.pid!, 'SIGINT')
+    const [code, signal] = await closed
+    assert.equal(signal, null, stderr)
+    assert.equal(code, 1, stdout + stderr)
+    const result = JSON.parse(stdout)
+    assert.equal(result.outcome, 'cancelled')
+    assert.equal(result.termination, 'unknown')
+    assert.deepEqual(server.observations.signals, ['TERM'])
+    assert.equal(server.observations.closed, 1)
+  } finally { child.kill('SIGKILL'); await server.close(); await isolated.close() }
+})
 
 test('missing status is unknown and retained output remains capped while both streams drain', async () => {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
