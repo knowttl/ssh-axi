@@ -1,0 +1,8 @@
+[
+  { "case": "approved", "expected": "authenticated", "credentialsSent": true },
+  { "case": "unknown-key", "expected": "TRUST_FAILED", "credentialsSent": false },
+  { "case": "changed-key", "expected": "TRUST_FAILED", "credentialsSent": false },
+  { "case": "disallowed-address", "expected": "ADDRESS_DENIED", "credentialsSent": false },
+  { "case": "missing-key", "expected": "KEY_UNAVAILABLE", "credentialsSent": false },
+  { "case": "bad-passphrase", "expected": "AUTH_FAILED", "credentialsSent": false }
+]

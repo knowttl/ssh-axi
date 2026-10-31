@@ -17,5 +17,4 @@ Tests are never required first; a change is verified end to end against the beha
 Exempt: validation-boundary tests, contract tests against an agreed schema or recording, and regression tests that cite the bug they reproduce.
 <!-- END canonical test-quality rules -->
 
-The build is offline: tests use fakes only, never contact a real SSH host, and never use real credentials.
-Tests use loopback peers only; outbound network is denied at the process level.
+See [README.md](README.md) for build commands, test isolation and fixture requirements.
