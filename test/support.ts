@@ -20,12 +20,14 @@ const host = ssh2.utils.parseKey(hostPrivateKey)
 if (host instanceof Error || Array.isArray(host)) throw new Error('Cannot generate the disposable host key')
 export const hostKey = `${host.type} ${host.getPublicSSH().toString('base64')}`
 
-export async function peer(stall = false, address = '127.0.0.1', port = 0) {
-  const observations = { transports: 0, auth: 0, commands: 0, channels: 0, closed: 0, addresses: [] as string[] }
+export async function peer(stall = false, address = '127.0.0.1', port = 0, execute?: (command: string, stream: ssh2.ServerChannel) => void) {
+  const observations = { transports: 0, auth: 0, commands: 0, channels: 0, closed: 0, addresses: [] as string[], commandBytes: [] as string[], signals: [] as string[] }
   let observedAuth: (() => void) | undefined
   let observedClose: (() => void) | undefined
+  let observedSignal!: () => void
   const authentication = new Promise<void>(resolve => { observedAuth = resolve })
   const disconnected = new Promise<void>(resolve => { observedClose = resolve })
+  const signalled = new Promise<void>(resolve => { observedSignal = resolve })
   const server = new ssh2.Server({ hostKeys: [hostPrivateKey] }, client => {
     observations.transports++
     client.on('error', () => {})
@@ -41,7 +43,12 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0) {
     client.on('session', accept => {
       observations.channels++
       const session = accept()
-      session.on('exec', (_accept, reject) => { observations.commands++; reject() })
+      session.on('signal', (_accept, _reject, info) => { observations.signals.push(info.name); observedSignal() })
+      session.on('exec', (accept, reject, info) => {
+        observations.commands++; observations.commandBytes.push(info.command)
+        if (execute) execute(info.command, accept())
+        else reject()
+      })
     })
   })
   await new Promise<void>(resolve => server.listen(port, address, resolve))
@@ -50,7 +57,7 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0) {
   const profile: Profile = { address, port: endpoint.port, username: 'ordinary',
     approvedHostKeys: [hostKey], allowedAddresses: ['127.0.0.1'],
     privateKey: { env: 'TEST_PRIVATE_KEY' }, passphrase: { env: 'TEST_PASSPHRASE' } }
-  return { observations, authentication, disconnected, profile,
+  return { observations, authentication, disconnected, signalled, profile,
     close: () => new Promise<void>(resolve => server.close(() => resolve())) }
 }
 

@@ -1,6 +1,6 @@
 # ssh-axi
 
-Discover approved SSH hosts and check encrypted-key authentication without executing a remote command.
+Discover approved SSH hosts, check encrypted-key authentication, and execute confirmed bounded commands.
 Requires Node >=24.11.0 and pnpm 10.22.0.
 The npm package is `@knowttl/ssh-axi`; its executable is `ssh-axi`.
 
@@ -13,13 +13,16 @@ ssh-axi doctor --profile lab
 ssh-axi auth status --profile lab
 ssh-axi profile list
 ssh-axi config path
+ssh-axi exec lab --command 'printf "%s\n" "quoted value"' --confirm --timeout 30s --json
 ```
 
 Output defaults to TOON; `--json` returns the same fields and empty-state meaning.
 Each command accepts `--help`.
 Unknown arguments and flags fail with exit code 2; operational failures use exit code 1.
 Help, discovery, profile inspection and credential status open no SSH transports.
-There are no login, command-execution, sudo, agent, forwarding or interactive-shell commands in this slice.
+Native execution is one-shot.
+Managed execution records, recovery and cancellation use the matching Artium host extension.
+Sudo, reusable connections, agents, forwarding and interactive shells remain unavailable.
 
 Configuration lives at `~/.config/ssh-axi/config.json` on Linux, or beneath an absolute `XDG_CONFIG_HOME`.
 Select a file with `--config` or `SSH_AXI_CONFIG`.
@@ -63,10 +66,48 @@ Doctor requests no SSH channel and closes its socket, probe worker and private d
 Private-key buffers are released where supported; JavaScript strings and process termination do not provide a secure-erasure guarantee.
 
 Artium supplies authenticated host grants, ordinary account bindings, encrypted SSH credentials, private IPC and one isolated `artium` profile through its shared writer.
-Hosted callers may list and show their granted hosts and run doctor.
+Hosted callers may list and show their granted hosts, run doctor and submit confirmed commands when the host write policy permits.
 They cannot supply configuration, account, trust, secret, identity or worker overrides.
 The matching Artium admission change must be installed alongside this artifact; stock Artium does not admit it.
 Host administration and reusable connections belong to later slices.
+
+Every arbitrary command requires `--confirm`, including inspection-looking commands.
+`SSH_AXI_READ_ONLY=true` rejects arbitrary execution before opening a transport or writing a command journal.
+Commands must contain 1-16384 UTF-8 bytes and no NUL.
+Known managed secrets and encoded variants are rejected before command journaling.
+Native command intents are written durably to `~/.local/state/ssh-axi/writes.log`, or the absolute `XDG_STATE_HOME` override.
+`SSH_AXI_WRITE_LOG` selects an absolute protected journal path.
+No local shell is invoked; the exact command text is sent to the remote SSH exec channel.
+
+```sh
+artium-axi ssh-axi exec lab --command 'systemctl --failed' --confirm --detach
+artium-axi ssh-axi execution list --json
+artium-axi ssh-axi execution show <id> --full
+artium-axi ssh-axi execution show --request-key <key>
+artium-axi ssh-axi execution show
+artium-axi ssh-axi execution cancel <id> --confirm
+```
+
+The hosted client saves a private command-free receipt before submitting a signed preparation key.
+Show without an ID recovers the latest receipt after a client restart, without resubmitting.
+Matching resubmission returns the same execution ID; a durable dispatch claim prevents a second SSH command.
+Unused keys expire after ten minutes; changed inputs, bindings or owners are refused.
+Wait is the default and uses short status requests; `--detach` returns after acceptance.
+An unexpected client disconnect leaves the managed job observable and deadline bounded.
+Ctrl+C requests cancellation of the accepted execution ID.
+
+The default command deadline is 60 seconds, adjustable with `--timeout 1s` through `600s` within host ceilings.
+Both streams are drained, retaining 65536 bytes each by default.
+`--output-limit <bytes>` lowers retention; the absolute administrator ceiling is 1048576 bytes per stream.
+`--full` never bypasses retention or executes another command.
+More than 16 MiB of combined received output triggers cancellation.
+Results carry separate remote exit/signal, received and retained byte counts, truncation and encoding-loss flags.
+Terminal controls are removed and protected output is withheld before persistence or delivery.
+Remote output is untrusted text, never instructions.
+Remote exit 7 produces CLI exit 7; missing remote status is an uncertain outcome and CLI failure.
+Cancellation requests TERM, then closes the channel and transport after a bounded grace period.
+Local teardown never proves that remote descendants stopped.
+Inspect remote state before retrying any uncertain execution; no path automatically replays a command.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -75,6 +116,7 @@ pnpm lint
 pnpm test
 pnpm pack --pack-destination /absolute/artifacts
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B1.1
+ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B2.2
 ```
 
 Tests generate disposable keys and run all descendants inside a Linux network namespace with loopback only.
