@@ -37,10 +37,11 @@ export function parseArguments(args: readonly string[]) {
   const command = positional[0] === 'doctor' ? 'doctor' : positional.slice(0, 2).join(' ')
   const definition = commands[command]
   const count = command === '' ? 0 : command === 'doctor' ? 1 : 2
-  if (!definition || positional.length !== count + definition.arguments && !(help && positional.length === count)) {
+  const selectedDoctor = command === 'doctor' && positional.length === count
+  if (!definition || positional.length !== count + definition.arguments && !selectedDoctor && !(help && positional.length === count)) {
     throw new SshError('USAGE', 'Use ssh-axi host list, host show <host>, doctor <host>, auth status, profile list, or config path.', 2)
   }
-  if (command === 'doctor' || command === 'host show') {
+  if ((command === 'doctor' || command === 'host show') && positional[count] !== undefined) {
     if (profile !== undefined) throw new SshError('USAGE', 'Use the host argument to select the profile for this command.', 2)
     profile = positional[count]
   }

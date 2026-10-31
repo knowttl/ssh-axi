@@ -9,6 +9,7 @@ ssh-axi
 ssh-axi host list
 ssh-axi host show lab
 ssh-axi doctor lab --json
+ssh-axi doctor --profile lab
 ssh-axi auth status --profile lab
 ssh-axi profile list
 ssh-axi config path

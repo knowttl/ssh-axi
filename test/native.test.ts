@@ -97,6 +97,20 @@ test('inline secrets and unsafe secret files are refused without exposing values
   } finally { await server.close(); await isolated.close() }
 })
 
+test('native doctor selects a complete environment profile without a host argument', async () => {
+  const server = await peer()
+  try {
+    const result = await cli(['doctor', '--json'], {
+      SSH_AXI_ADDRESS: server.profile.address, SSH_AXI_PORT: String(server.profile.port), SSH_AXI_USERNAME: server.profile.username,
+      SSH_AXI_APPROVED_HOST_KEYS: JSON.stringify(server.profile.approvedHostKeys), SSH_AXI_ALLOWED_ADDRESSES: JSON.stringify(server.profile.allowedAddresses),
+      SSH_AXI_PRIVATE_KEY: privateKey, SSH_AXI_PASSPHRASE: passphrase })
+    assert.equal(result.code, 0, result.stdout)
+    assert.equal(JSON.parse(result.stdout).host, 'env')
+    assert.equal(JSON.parse(result.stdout).authenticated, true)
+    assert.equal(server.observations.commands, 0)
+  } finally { await server.close() }
+})
+
 for (const fixture of matrix) test(`installed doctor: ${fixture.case}`, async () => {
   const server = await peer()
   const profile = structuredClone(server.profile)
