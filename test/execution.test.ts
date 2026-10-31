@@ -94,6 +94,31 @@ test('explicit cancellation closes an ignoring peer and preserves non-success', 
   } finally { await server.close() }
 })
 
+for (const [response, signal, termination] of [
+  ['exit-signal', 'SIGTERM', 'remote-exit'], ['channel-loss', null, 'unknown'],
+] as const) test(`cancellation reports honest certainty after remote ${response}`, async () => {
+  let admitted!: () => void
+  const dispatched = new Promise<void>(resolve => { admitted = resolve })
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream, session) => {
+    session.on('signal', () => {
+      if (response === 'exit-signal') stream.exit('TERM')
+      stream.end()
+    })
+    admitted()
+  })
+  const cancellation = new AbortController()
+  try {
+    const pending = executeCommand(server.profile, settings, cancellation.signal)
+    await dispatched
+    cancellation.abort()
+    const result = await pending
+    assert.equal(result.outcome, 'cancelled')
+    assert.equal(result.remoteExit, null)
+    assert.equal(result.remoteSignal, signal)
+    assert.equal(result.termination, termination)
+  } finally { await server.close() }
+})
+
 test('a flooding peer is stopped after the combined received-byte threshold', async () => {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
     const block = Buffer.alloc(32768, 65)
