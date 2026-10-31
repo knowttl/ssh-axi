@@ -70,6 +70,7 @@ Host administration and reusable connections belong to later slices.
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm build
 pnpm lint
 pnpm test
 pnpm pack --pack-destination /absolute/artifacts
@@ -81,4 +82,5 @@ They require `unshare`, `ip` and `mount`, and never fall back to unrestricted ne
 The default suite verifies a reproducible tarball installed into a clean prefix and explicitly skips Artium unless a fixture is provided.
 The opt-in journey requires an exported, admitted Artium fixture with its dependencies installed.
 The fixture harness seeds minimal hosts directly in its disposable database; no fixture-seeding route exists in the product.
-Native Windows paths are defined by the credential contract, but DACL verification and native Windows evidence remain pending, so protected-file operations fail closed there.
+On Windows, the default configuration path is `%APPDATA%/ssh-axi/config.json`, with an absolute `APPDATA` required.
+DACL verification and native Windows evidence remain pending, so protected-file operations fail closed there.
