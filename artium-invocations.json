@@ -1,0 +1,68 @@
+{
+  "revision": 1,
+  "commands": [
+    {
+      "command": "home",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "host list",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "host show",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "doctor",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "auth status",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "profile list",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "config path",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    }
+  ]
+}
