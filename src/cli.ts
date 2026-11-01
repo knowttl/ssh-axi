@@ -54,7 +54,10 @@ export async function main(args: readonly string[]): Promise<void> {
     if (parsed.command === 'auth status') {
       const key = resolveSecret(selected.profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)
       const passphrase = resolveSecret(selected.profile.passphrase, 'SSH_AXI_PASSPHRASE', false)
-      output({ profile: selected.name, privateKey: key ? 'available' : 'missing', passphrase: passphrase ? 'available' : 'absent', network: 'not checked' })
+      const source = (reference: Profile['privateKey'], fallback: string) => reference && 'file' in reference ? 'protected file' : `env:${reference?.env ?? fallback}`
+      output({ profile: selected.name, privateKey: key ? 'available' : 'missing', passphrase: passphrase ? 'available' : 'absent',
+        privateKeySource: source(selected.profile.privateKey, 'SSH_AXI_PRIVATE_KEY'),
+        passphraseSource: source(selected.profile.passphrase, 'SSH_AXI_PASSPHRASE'), network: 'not checked' })
       return
     }
     output({ host: selected.name, ...await doctor(selected.profile), commandsExecuted: 0 })
