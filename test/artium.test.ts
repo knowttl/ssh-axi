@@ -10,7 +10,7 @@ test('Artium discovery, execution, connection lifetime and recovery journeys', {
   const scratch = await mkdtemp(join(tmpdir(), 'ssh-axi-journey-'))
   try {
     const report = join(scratch, 'results.json')
-    const result = await run(process.execPath, [process.env.npm_execpath!, 'exec', 'vitest', 'run', 'test/ssh-admission.test.ts', '--reporter=json', '--outputFile', report], process.env, root)
+    const result = await run(process.execPath, [process.env.npm_execpath!, 'exec', 'vitest', 'run', 'test/ssh-admission.test.ts', 'test/integration/ssh-rotation.test.ts', '--reporter=json', '--outputFile', report], process.env, root)
     assert.equal(result.code, 0, result.stdout + result.stderr)
     const evidence = JSON.parse(await readFile(report, 'utf8')) as {
       testResults: { assertionResults: { fullName: string, status: string }[] }[]
@@ -30,6 +30,11 @@ test('Artium discovery, execution, connection lifetime and recovery journeys', {
       'hard worker loss leaves the durable execution uncertain, cleans files and never replays',
       'hard server crash before send never replays the durable dispatch claim',
       'hard server crash after send never replays the durable dispatch claim',
+      'public host administration confirms changes, rejects stale revisions and separates credential authority',
+      'sudo dispatch selects a distinct key and account and never reuses an ordinary connection',
+      'audit reads enforce current authority and prune output separately from attributable metadata',
+      'administration pages render escaped audit text and confirmed host forms in a real browser',
+      'offline master-key rotation preserves encrypted SSH output samples',
     ]) assert.ok(passed.has(behavior), `Missing required hosted conformance: ${behavior}`)
   } finally { await rm(scratch, { recursive: true, force: true }) }
 })

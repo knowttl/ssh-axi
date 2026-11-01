@@ -14,6 +14,9 @@ importers:
       ajv:
         specifier: 8.17.1
         version: 8.17.1
+      axi-sdk-js:
+        specifier: 0.1.13
+        version: 0.1.13
       ssh2:
         specifier: 1.17.0
         version: 1.17.0
@@ -47,6 +50,10 @@ packages:
 
   asn1@0.2.6:
     resolution: {integrity: sha512-ix/FxPn0MDjeyJ7i/yoHGFt/EX6LyNbxSEhPPXODPL+KB0VPk86UYfL0lMdy+KCnv+fmvIzySwaK5COwqVbWTQ==}
+
+  axi-sdk-js@0.1.13:
+    resolution: {integrity: sha512-Ygh8qUN5kdwQ3ASw+BNzCKYpy5QYi18vfcEpqEOQOSrcyh6i4wChrPMtvVW0/3Sqho3xPH3CuFkP0QUma5oxxA==}
+    engines: {node: '>=20'}
 
   bcrypt-pbkdf@1.0.2:
     resolution: {integrity: sha512-qeFIXtP4MSoi6NLqO12WfqARWWuCKi2Rn/9hJLEmtB5yTNr9DqFWkJRCf2qShWzPeAMRnOgCrq0sg/KLv5ES9w==}
@@ -122,6 +129,10 @@ snapshots:
   asn1@0.2.6:
     dependencies:
       safer-buffer: 2.1.2
+
+  axi-sdk-js@0.1.13:
+    dependencies:
+      '@toon-format/toon': 2.3.1
 
   bcrypt-pbkdf@1.0.2:
     dependencies:

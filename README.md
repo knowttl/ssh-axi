@@ -23,7 +23,8 @@ Help, discovery, profile inspection and credential status open no SSH transports
 Native execution is one-shot.
 Managed execution records, recovery and cancellation use the matching Artium host extension.
 Reusable connections require the matching Artium connection-lifetime extension.
-Sudo, agents, forwarding and interactive shells remain unavailable.
+Managed sudo requires a distinct approved account and SSH credential with a current sudo grant.
+Agents, forwarding and interactive shells remain unavailable.
 
 Configuration lives at `~/.config/ssh-axi/config.json` on Linux, or beneath an absolute `XDG_CONFIG_HOME`.
 Select a file with `--config` or `SSH_AXI_CONFIG`.
@@ -51,6 +52,7 @@ The strict profile contract is shipped as `axi-credential.schema.json`.
 Keys and passphrases accept environment or protected-file SecretRefs only.
 Secret values and inline private keys are refused in JSON and arguments.
 An omitted private-key reference defaults to `SSH_AXI_PRIVATE_KEY`; the passphrase defaults to `SSH_AXI_PASSPHRASE`.
+`auth status` reports credential availability and sources as `env:<name>` or `protected file`, without displaying secret values or file paths or checking network authentication.
 Linux secret files must be owned by the caller, regular, protected from group/other access and reachable through protected directories without symlinks.
 Configuration files must also be owned and protected against group/other writes.
 
@@ -66,11 +68,16 @@ The authentication deadline is 15 seconds, including resolution and connection s
 Doctor requests no SSH channel and closes its socket, probe worker and private directories before returning.
 Private-key buffers are released where supported; JavaScript strings and process termination do not provide a secure-erasure guarantee.
 
-Artium supplies authenticated host grants, ordinary account bindings, encrypted SSH credentials, private IPC and one isolated `artium` profile through its shared writer.
+Artium supplies authenticated host grants, separate ordinary and sudo account bindings, encrypted SSH credentials, private IPC and one isolated `artium` profile through its shared writer.
 Hosted callers may list and show their granted hosts, run doctor and submit confirmed commands when the host write policy permits.
 They cannot supply configuration, account, trust, secret, identity or worker overrides.
 The matching Artium admission change must be installed alongside this artifact; stock Artium does not admit it.
-Host administration belongs to a later slice.
+The matching host extension provides `/admin/ssh` for confirmed, revision-checked host, trust, binding and grant changes.
+Server keys require independent verification and at most two approved keys may overlap during rotation.
+Host and credential administration have separate delegated permissions; only credential administrators can replace or delete encrypted SSH secrets, which are never displayed.
+SSH credential identifiers cannot resolve credentials for other tools.
+Changes fence affected connections before acknowledgement.
+The corresponding authenticated APIs live under `/v1/admin/ssh/`.
 
 Every arbitrary command requires `--confirm`, including inspection-looking commands.
 `SSH_AXI_READ_ONLY=true` rejects arbitrary execution before opening a transport or writing a command journal.
@@ -94,12 +101,18 @@ artium-axi ssh-axi connection list
 artium-axi ssh-axi connection show <connection-id>
 artium-axi ssh-axi connection set <connection-id> --idle-timeout 5m
 artium-axi ssh-axi exec lab --connection <connection-id> --command 'pwd' --confirm
+artium-axi ssh-axi exec lab --sudo --command 'printf "%s\n" "value" | cat' --confirm
 artium-axi ssh-axi connection close <connection-id>
 ```
 
 Hosted connections belong to one authenticated user and login session family.
 Each command starts a fresh remote process on the same transport.
-An explicit connection must match the selected host and ordinary binding, with no fallback reconnection.
+An explicit connection must match the selected host and ordinary or sudo binding, with no fallback reconnection.
+Sudo dispatch sends `sudo -n -- /bin/sh -c <quoted-command>` through its own matching connection.
+Pipelines and redirects remain inside that privileged shell.
+Password-required or terminal-required sudo returns `SUDO_DENIED` with administrator guidance.
+Controlled peers establish account, key and command selection only.
+Actual ordinary-account non-elevation and successful non-root passwordless elevation remain commissioning checks.
 There is one active command per connection; overlapping use returns `CONNECTION_BUSY`.
 Closing an active connection requires `--confirm` and cancels its command.
 Repeated close by the owner is idempotent.
@@ -130,6 +143,16 @@ Cancellation requests TERM and forces channel and transport teardown if the comm
 Local teardown never proves that remote descendants stopped.
 Inspect remote state before retrying any uncertain execution; no path automatically replays a command.
 
+Execution owners and authorized audit administrators can inspect records under current policy.
+`/admin/ssh/audit` escapes output as untrusted text and never displays credentials.
+Every audit read and export is recorded.
+Metadata includes the initiating user and session family, host and endpoint, binding revision, sudo mode, exact sanitized command, confirmation, request/execution IDs, UTC timing, outcome, exit/signal, byte counts and termination certainty.
+Sanitized output samples are encrypted and capped at 8 KiB per stream, expiring after 14 days.
+Metadata and sanitized commands expire after 90 days; default exports contain metadata only.
+Credential deletion removes the secret and fences its connections while preserving execution metadata.
+Pruning active storage does not delete backups.
+Before commissioning, operators must declare and test backup disposal that respects both retention limits, including old encrypted snapshots and their recovery keys.
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
@@ -139,12 +162,15 @@ pnpm pack --pack-destination /absolute/artifacts
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B1.1
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B2.2
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B3.2
+ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B4.1
+ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B4.2
+ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B4.3
 ```
 
 Tests generate disposable keys and run all descendants inside a Linux network namespace with loopback only.
 They require `unshare`, `ip` and `mount`, and never fall back to unrestricted networking.
 The default suite verifies a reproducible tarball installed into a clean prefix and explicitly skips Artium unless a fixture is provided.
 The opt-in journey requires an exported, admitted Artium fixture with its dependencies installed.
-The fixture harness seeds minimal hosts directly in its disposable database; no fixture-seeding route exists in the product.
+The fixture harness seeds minimal pre-existing hosts directly in its disposable database and exercises B4 changes through public administration; no fixture-seeding route exists in the product.
 On Windows, the default configuration path is `%APPDATA%/ssh-axi/config.json`, with an absolute `APPDATA` required.
 DACL verification and native Windows evidence remain pending, so protected-file operations fail closed there.

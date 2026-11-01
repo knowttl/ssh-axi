@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, mkdir, writeFile, chmod, symlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { decode } from '@toon-format/toon'
 import { temporary, run, configuration, peer, privateKey, passphrase, digest } from './support.ts'
@@ -31,6 +31,41 @@ before(async () => {
 })
 after(() => scratch.close())
 const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => run(executable, args, { ...environment, ...extra })
+
+test('installed version probes stay near the Node startup floor', async () => {
+  const measure = async (command: string, args: string[]) => {
+    const started = performance.now()
+    const result = await run(command, args, environment)
+    assert.equal(result.code, 0, result.stdout + result.stderr)
+    return performance.now() - started
+  }
+  const floor = await measure(process.execPath, ['-e', 'console.log(1)'])
+  for (const flag of ['--version', '-v', '-V']) {
+    assert.equal((await cli([flag])).stdout, '0.1.0\n')
+    assert.ok(await measure(executable, [flag]) < floor * 4 + 20, 'version must avoid loading the command graph')
+  }
+})
+
+test('Linux protected-file credentials accept read-only keys and refuse redirected parents', async () => {
+  const isolated = await temporary()
+  const server = await peer()
+  try {
+    const secrets = join(isolated.root, 'secrets')
+    await mkdir(secrets, { mode: 0o700 })
+    const key = join(secrets, 'key')
+    await writeFile(key, privateKey, { mode: 0o400 })
+    const path = await configuration(isolated.root, { fixture: { ...server.profile, privateKey: { file: key } } })
+    const accepted = await cli(['doctor', 'fixture', '--config', path, '--json'])
+    assert.equal(accepted.code, 0, accepted.stdout + accepted.stderr)
+    const redirected = join(isolated.root, 'redirected')
+    await symlink(secrets, redirected)
+    await configuration(isolated.root, { fixture: { ...server.profile, privateKey: { file: join(redirected, 'key') } } })
+    const refused = await cli(['doctor', 'fixture', '--config', path, '--json'])
+    assert.equal(JSON.parse(refused.stdout).error.code, 'CONFIG_INSECURE')
+    assert.equal(server.observations.transports, 1)
+    await chmod(key, 0o600)
+  } finally { await server.close(); await isolated.close() }
+})
 
 async function connectionWorker(profile: Parameters<typeof configuration>[1][string]) {
   const privateHome = await temporary()
@@ -177,6 +212,7 @@ for (const fixture of matrix) test(`installed doctor: ${fixture.case}`, async ()
   if (fixture.case === 'disallowed-address') profile.allowedAddresses = ['192.0.2.1']
   if (fixture.case === 'missing-key') extra.TEST_PRIVATE_KEY = ''
   if (fixture.case === 'bad-passphrase') extra.TEST_PASSPHRASE = 'CANARY-wrong-passphrase'
+  if (fixture.case === 'missing-passphrase') extra.TEST_PASSPHRASE = ''
   const isolated = await temporary()
   try {
     const path = await configuration(isolated.root, { fixture: profile })
