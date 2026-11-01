@@ -36,7 +36,7 @@ export function configPath(explicit?: string): string {
   return join(base, 'ssh-axi', 'config.json')
 }
 
-export function readPrivateFile(file: string, secret: boolean): string {
+export function openPrivateFile(file: string, secret: boolean): number {
   if (!isAbsolute(file)) throw new SshError('CONFIG_INSECURE', 'Private file paths must be absolute.')
   // Until native DACL verification is available, Windows custody fails closed.
   if (process.platform === 'win32') throw new SshError('PLATFORM_PENDING', 'Native Windows file custody validation is pending.')
@@ -55,6 +55,16 @@ export function readPrivateFile(file: string, secret: boolean): string {
     if (!info.isFile() || info.uid !== process.getuid!() || (info.mode & (secret ? 0o077 : 0o022)) !== 0) {
       throw new SshError('CONFIG_INSECURE', 'Private files must be regular, owned by this user and protected.')
     }
+    return descriptor
+  } catch (error) {
+    closeSync(descriptor)
+    throw error
+  }
+}
+
+export function readPrivateFile(file: string, secret: boolean): string {
+  const descriptor = openPrivateFile(file, secret)
+  try {
     return readFileSync(descriptor, 'utf8').replace(/^\uFEFF/, '').trimEnd()
   } finally { closeSync(descriptor) }
 }

@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { executeCommand } from './doctor.js'
 import { checkCommand } from './output.js'
-import { readPrivateFile, resolveSecret, type Profile } from './profile.js'
+import { openPrivateFile, resolveSecret, type Profile } from './profile.js'
 import { SshError } from './errors.js'
 import type { parseArguments } from './arguments.js'
 
@@ -18,7 +18,7 @@ export function openWriteJournal(): number {
   // Reuse the private-file ownership/parent checks before appending.
   const descriptor = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600)
   try {
-    readPrivateFile(file, true)
+    closeSync(openPrivateFile(file, true))
     if (!fstatSync(descriptor).isFile()) throw new SshError('CONFIG_INSECURE', 'Journal must be a private regular file.')
     return descriptor
   } catch (error) {
