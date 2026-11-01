@@ -7,9 +7,10 @@ import { temporary, run, configuration, peer, privateKey, passphrase, digest } f
 import matrix from './fixtures/host-auth.json' with { type: 'json' }
 import { fork } from 'node:child_process'
 import type { ExecutionResult } from '../dist/authenticate.js'
+import { VERSION } from '../src/version.ts'
 
 const scratch = await temporary()
-const prefix = join(scratch.root, 'installed')
+const prefix = process.env.SSH_AXI_TEST_PREFIX!
 const pnpm = process.env.npm_execpath!
 const environment = { PATH: process.env.PATH, HOME: scratch.root, XDG_CONFIG_HOME: join(scratch.root, 'config'),
   TMPDIR: join(scratch.root, 'tmp'), TEST_PRIVATE_KEY: privateKey, TEST_PASSPHRASE: passphrase }
@@ -18,15 +19,11 @@ before(async () => {
   await mkdir(environment.TMPDIR, { mode: 0o700 })
   const first = await run(process.execPath, [pnpm, 'pack', '--pack-destination', scratch.root], process.env, resolve('.'))
   assert.equal(first.code, 0, first.stderr)
-  const tarball = join(scratch.root, 'knowttl-ssh-axi-0.1.0.tgz')
+  const tarball = join(scratch.root, `knowttl-ssh-axi-${VERSION}.tgz`)
   const hash = digest(await readFile(tarball))
   const second = await run(process.execPath, [pnpm, 'pack', '--pack-destination', scratch.root], process.env, resolve('.'))
   assert.equal(second.code, 0, second.stderr)
   assert.equal(digest(await readFile(tarball)), hash, 'packing the same source must reproduce the artifact')
-  await mkdir(prefix)
-  await writeFile(join(prefix, 'package.json'), '{"private":true}')
-  const install = await run(process.execPath, [pnpm, '--dir', prefix, '--store-dir', join(process.env.HOME!, '.local/share/pnpm/store'), 'add', '--offline', tarball], process.env)
-  assert.equal(install.code, 0, install.stdout + install.stderr)
   executable = join(prefix, 'node_modules', '.bin', 'ssh-axi')
 })
 after(() => scratch.close())
@@ -41,7 +38,7 @@ test('installed version probes stay near the Node startup floor', async () => {
   }
   const floor = await measure(process.execPath, ['-e', 'console.log(1)'])
   for (const flag of ['--version', '-v', '-V']) {
-    assert.equal((await cli([flag])).stdout, '0.1.0\n')
+    assert.equal((await cli([flag])).stdout, `${VERSION}\n`)
     assert.ok(await measure(executable, [flag]) < floor * 4 + 20, 'version must avoid loading the command graph')
   }
 })

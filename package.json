@@ -2,6 +2,7 @@
   "name": "@knowttl/ssh-axi",
   "version": "0.1.0",
   "description": "Discover approved SSH hosts and execute confirmed bounded commands",
+  "repository": { "type": "git", "url": "git+https://github.com/knowttl/ssh-axi.git" },
   "type": "module",
   "bin": { "ssh-axi": "dist/main.js" },
   "files": ["dist", "axi-credential.schema.json", "artium-invocations.json", "README.md"],

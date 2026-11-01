@@ -1,8 +1,14 @@
 # ssh-axi
 
 Discover approved SSH hosts, check encrypted-key authentication, and execute confirmed bounded commands.
-Requires Node >=24.11.0 and pnpm 10.22.0.
+Requires Node >=24.11.0.
 The npm package is `@knowttl/ssh-axi`; its executable is `ssh-axi`.
+
+## Install
+
+```sh
+npm install -g @knowttl/ssh-axi
+```
 
 ```sh
 ssh-axi
@@ -153,6 +159,8 @@ Credential deletion removes the secret and fences its connections while preservi
 Pruning active storage does not delete backups.
 Before commissioning, operators must declare and test backup disposal that respects both retention limits, including old encrypted snapshots and their recovery keys.
 
+Development requires pnpm 10.22.0.
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
@@ -167,7 +175,8 @@ ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B4.2
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B4.3
 ```
 
-Tests generate disposable keys and run all descendants inside a Linux network namespace with loopback only.
+Test preparation packs the local package and installs it with registry dependencies into a clean prefix before network isolation.
+Tests generate disposable keys and run all test descendants inside a Linux network namespace with loopback only.
 They require `unshare`, `ip` and `mount`, and never fall back to unrestricted networking.
 The default suite verifies a reproducible tarball installed into a clean prefix and explicitly skips Artium unless a fixture is provided.
 The opt-in journey requires an exported, admitted Artium fixture with its dependencies installed.
