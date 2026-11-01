@@ -263,6 +263,7 @@ Run `pnpm install --frozen-lockfile` first to populate the local dependency stor
 Test preparation reuses the project lockfile so offline installation does not require cached registry metadata.
 The package-contract checks verify the archive allowlist, installed bin help/version, and published admission entry points without an Artium fixture.
 The default suite verifies a reproducible tarball installed into a clean prefix and explicitly skips Artium unless a fixture is provided.
+To iterate on selected tests with the same package preparation and network isolation, run `pnpm test test/package-contract.test.ts`.
 
 The opt-in journey requires an exported, admitted Artium fixture with its dependencies installed.
 The fixture harness seeds minimal pre-existing hosts directly in its disposable database and exercises administration changes through public administration; no fixture-seeding route exists in the product.
@@ -271,7 +272,7 @@ The fixture harness seeds minimal pre-existing hosts directly in its disposable 
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B1.1
 ```
 
-The journey slices are B1.1, B2.2, B3.2, B4.1, B4.2 and B4.3.
+The journey slices are B1.1, B2.1, B2.2, B3.1, B3.2, B4.1, B4.2 and B4.3.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## Security
