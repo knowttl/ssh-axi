@@ -257,8 +257,10 @@ pnpm pack --pack-destination /absolute/artifacts
 ```
 
 Tests generate disposable keys and run all test descendants inside a Linux network namespace with loopback only.
-They require `unshare`, `ip` and `mount`, and never fall back to unrestricted networking.
-Test preparation packs the local package and installs it with registry dependencies into a clean prefix before network isolation.
+They require `unshare`, `ip`, `mount` and `tar`, and never fall back to unrestricted networking.
+Test preparation packs the local package and installs it offline into a clean prefix inside network isolation.
+Run `pnpm install` first to populate the local dependency store.
+The package-contract checks verify the archive allowlist, installed bin help/version, and published admission entry points without an Artium fixture.
 The default suite verifies a reproducible tarball installed into a clean prefix and explicitly skips Artium unless a fixture is provided.
 
 The opt-in journey requires an exported, admitted Artium fixture with its dependencies installed.
