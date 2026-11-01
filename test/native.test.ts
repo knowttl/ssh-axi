@@ -8,6 +8,7 @@ import matrix from './fixtures/host-auth.json' with { type: 'json' }
 import { fork } from 'node:child_process'
 import type { ExecutionResult } from '../dist/authenticate.js'
 import { VERSION } from '../src/version.ts'
+import { commands } from '../dist/arguments.js'
 
 const scratch = await temporary()
 const prefix = process.env.SSH_AXI_TEST_PREFIX!
@@ -28,6 +29,73 @@ before(async () => {
 })
 after(() => scratch.close())
 const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => run(executable, args, { ...environment, ...extra })
+
+for (const command of Object.keys(commands)) test(`installed help for ${command || 'home'} needs no configuration or arguments`, async () => {
+  const result = await cli([...command.split(' ').filter(Boolean), '--help', '--json'], { SSH_AXI_CONFIG: '/unreadable/config' })
+  assert.equal(result.code, 0, result.stdout + result.stderr)
+  const help = JSON.parse(result.stdout)
+  assert.equal(help.description, commands[command]!.description)
+  assert.ok(help.examples.length >= 2)
+  assert.match(help.flags, /--help/)
+  if (command.startsWith('execution ') || command.startsWith('connection ')) {
+    assert.match(help.availability, /Managed \(Artium\) only/)
+    assert.ok(help.examples.every((example: string) => example.startsWith('artium-axi ssh-axi ')))
+  }
+})
+
+test('standalone execution management explains that Artium is required', async () => {
+  for (const args of [['execution', 'list'], ['execution', 'show', 'fixture'], ['execution', 'cancel', 'fixture', '--confirm']]) {
+    const result = await cli([...args, '--json'])
+    assert.equal(result.code, 1, result.stdout)
+    assert.equal(JSON.parse(result.stdout).error.code, 'HOSTED_REQUIRED')
+  }
+  const usage = await cli(['unknown', '--json'])
+  assert.equal(usage.code, 2)
+  assert.match(JSON.parse(usage.stdout).error.message, /execution list\/show\/cancel \(managed, Artium only\)/)
+})
+
+test('hosted exec help describes the requested command without selecting credentials', async () => {
+  const child = fork(join(prefix, 'node_modules', '@knowttl', 'ssh-axi', 'dist', 'hosted.js'), ['exec', '--help', '--json'], {
+    env: environment, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  })
+  let stdout = ''
+  child.stdout!.on('data', chunk => { stdout += String(chunk) })
+  const exited = new Promise<number | null>(resolve => child.once('exit', resolve))
+  child.send({ revision: 1, hosts: [] })
+  assert.equal(await exited, 0, stdout)
+  const help = JSON.parse(stdout)
+  assert.equal(help.description, commands.exec!.description)
+  assert.match(help.flags, /--command <value>/)
+  assert.equal(help.defaults.timeout, '60s')
+  assert.ok(help.examples.every((example: string) => example.includes('exec <host> --command <text> --confirm')))
+})
+
+test('doctor and exec identify an insecure journal ancestor and accept a protected override', async () => {
+  const isolated = await temporary()
+  const server = await peer()
+  try {
+    const path = await configuration(isolated.root, { fixture: server.profile })
+    const local = join(isolated.root, '.local')
+    await mkdir(join(local, 'state'), { recursive: true, mode: 0o700 })
+    await chmod(local, 0o775)
+    const env = { HOME: isolated.root }
+    for (const args of [['doctor', 'fixture'], ['exec', 'fixture', '--command', 'true', '--confirm']]) {
+      const result = await cli([...args, '--config', path, '--json'], env)
+      assert.equal(result.code, 1, result.stdout)
+      const error = JSON.parse(result.stdout).error
+      assert.equal(error.code, 'CONFIG_INSECURE')
+      assert.ok(error.message.includes(local), error.message)
+      assert.match(error.message, /chmod g-w/)
+      assert.match(error.message, /SSH_AXI_WRITE_LOG/)
+    }
+    assert.equal(server.observations.transports, 0)
+    const journal = join(isolated.root, 'protected', 'writes.log')
+    const result = await cli(['doctor', 'fixture', '--config', path, '--json'], { ...env, SSH_AXI_WRITE_LOG: journal })
+    assert.equal(result.code, 0, result.stdout)
+    assert.equal(await readFile(journal, 'utf8'), '')
+    assert.equal(server.observations.commands, 0)
+  } finally { await server.close(); await isolated.close() }
+})
 
 test('installed version probes stay near the Node startup floor', async () => {
   const measure = async (command: string, args: string[]) => {

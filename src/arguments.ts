@@ -4,6 +4,26 @@ import { SshError } from './errors.js'
 export const commands: Record<string, { arguments: number, description: string, flags?: Record<string, string> }> = schema['x-commands']
 export const flagHelp = '--json, --help, --config <absolute-path>, --profile <name>'
 
+export function commandHelp(command: string, hosted = false) {
+  const definition = commands[command]!
+  const managed = command.startsWith('execution ') || command.startsWith('connection ')
+  const invocation = managed ? 'artium-axi ssh-axi' : 'ssh-axi'
+  const argument = managed && command !== 'connection open' ? ' <id>' : ' <host>'
+  const usage = command === 'exec' ? 'exec <host> --command <text> --confirm'
+    : command === 'execution cancel' ? 'execution cancel <id> --confirm'
+      : command === 'connection set' ? 'connection set <id> --idle-timeout <duration>'
+        : `${command}${definition.arguments ? argument : ''}`
+  return {
+    description: definition.description,
+    ...(managed ? { availability: 'Managed (Artium) only; use artium-axi ssh-axi.' } : {}),
+    ...(command === '' ? { commands: Object.keys(commands).filter(Boolean).map(name => `${name}${name.startsWith('execution ') || name.startsWith('connection ') ? ' (managed, Artium only)' : ''}`) } : {}),
+    flags: (hosted ? '--json, --help' : flagHelp) + Object.entries(definition.flags ?? {}).map(([key, type]) => `, --${key}${type === 'boolean' ? '' : ' <value>'}`).join(''),
+    ...(command === 'exec' ? { defaults: { timeout: '60s', outputLimit: '65536 bytes', confirm: false, detach: false, sudo: false } } : {}),
+    examples: command === '' ? ['ssh-axi host list', 'ssh-axi doctor <host>', 'ssh-axi config path']
+      : [`${invocation} ${usage}`, `${invocation} ${usage} --json`],
+  }
+}
+
 export function parseArguments(args: readonly string[]) {
   let prefix = 0
   while (['--json', '--help', '--config', '--profile'].includes(args[prefix]!)) prefix += ['--config', '--profile'].includes(args[prefix]!) ? 2 : 1
@@ -41,7 +61,7 @@ export function parseArguments(args: readonly string[]) {
   const selectedDoctor = command === 'doctor' && positional.length === count
   const receiptLookup = command === 'execution show' && positional.length === count
   if (!definition || positional.length !== count + definition.arguments && !selectedDoctor && !receiptLookup && !(help && positional.length === count)) {
-    throw new SshError('USAGE', 'Use ssh-axi host list, host show <host>, doctor <host>, exec <host> --command <text> --confirm, or execution list/show/cancel.', 2)
+    throw new SshError('USAGE', 'Use ssh-axi host list, host show <host>, doctor <host>, exec <host> --command <text> --confirm, or execution list/show/cancel (managed, Artium only).', 2)
   }
   if (['doctor', 'host show', 'exec'].includes(command) && positional[count] !== undefined) {
     if (profile !== undefined) throw new SshError('USAGE', 'Use the host argument to select the profile for this command.', 2)

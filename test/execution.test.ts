@@ -23,6 +23,7 @@ test('unused remote stdin reaches EOF while both output streams drain', async ()
     const result = await executeCommand(server.profile, { ...settings, timeout: 1 })
     assert.equal(result.outcome, 'completed')
     assert.equal(result.remoteExit, 0)
+    assert.equal(result.termination, 'remote-exit')
     assert.equal(result.stdout.text, '0')
     assert.equal(result.stderr.text, 'stdin closed')
   } finally { await server.close() }
@@ -142,6 +143,19 @@ test('explicit cancellation closes an ignoring peer and preserves non-success', 
     assert.equal(result.termination, 'unknown')
     assert.equal(result.remoteExit, null)
     assert.equal(server.observations.closed, 1)
+  } finally { await server.close() }
+})
+
+test('deadline termination is distinct from a normal remote exit when the peer acknowledges TERM', async () => {
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream, session) => {
+    session.on('signal', () => { stream.exit('TERM'); stream.end() })
+  })
+  try {
+    const result = await executeCommand(server.profile, { ...settings, timeout: 1 })
+    assert.equal(result.outcome, 'timed_out')
+    assert.equal(result.termination, 'deadline')
+    assert.equal(result.remoteSignal, 'SIGTERM')
+    assert.deepEqual(server.observations.signals, ['TERM'])
   } finally { await server.close() }
 })
 

@@ -2,12 +2,13 @@ import { encode } from '@toon-format/toon'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+import { closeSync } from 'node:fs'
 import { configPath, loadConfiguration, selectProfile, resolveSecret, type Profile } from './profile.js'
 import { doctor } from './doctor.js'
 import { SshError } from './errors.js'
-import { executeNative } from './native-execution.js'
+import { executeNative, openWriteJournal } from './native-execution.js'
 
-import { commands, flagHelp, parseArguments } from './arguments.js'
+import { commandHelp, parseArguments } from './arguments.js'
 
 function projection(name: string, profile: Profile) {
   return { id: name, address: profile.address, port: profile.port, username: profile.username }
@@ -19,16 +20,7 @@ export async function main(args: readonly string[]): Promise<void> {
   try {
     const parsed = parseArguments(args)
     if (parsed.help) {
-      const usage = parsed.command === 'exec' ? 'exec <host> --command <text> --confirm'
-        : parsed.command === 'execution cancel' ? 'execution cancel <id> --confirm'
-          : parsed.command === 'execution show' ? 'execution show <id>'
-            : parsed.command === 'connection set' ? 'connection set <id> --idle-timeout 5m'
-              : ['connection show', 'connection close'].includes(parsed.command) ? `${parsed.command} <id>`
-            : `${parsed.command}${commands[parsed.command]!.arguments ? ' <host>' : ''}`
-      output({ description: commands[parsed.command]!.description, flags: flagHelp + Object.keys(commands[parsed.command]!.flags ?? {}).map(key => `, --${key}`).join(''),
-        ...(parsed.command === 'exec' ? { defaults: { timeout: '60s', outputLimit: '65536 bytes' } } : {}),
-        examples: parsed.command === '' ? ['ssh-axi host list', 'ssh-axi doctor <host>', 'ssh-axi config path']
-          : [`ssh-axi ${usage}`, `ssh-axi ${usage} --json`] })
+      output(commandHelp(parsed.command))
       return
     }
     const path = configPath(parsed.config)
@@ -60,6 +52,7 @@ export async function main(args: readonly string[]): Promise<void> {
         passphraseSource: source(selected.profile.passphrase, 'SSH_AXI_PASSPHRASE'), network: 'not checked' })
       return
     }
+    closeSync(openWriteJournal())
     output({ host: selected.name, ...await doctor(selected.profile), commandsExecuted: 0 })
   } catch (error) {
     const safe = error instanceof SshError ? error : new SshError('INTERNAL_ERROR', 'The SSH operation failed.')

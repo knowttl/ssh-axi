@@ -62,10 +62,15 @@ ssh-axi exec <host> --command <text> --confirm
 Shared flags: `--json`, `--help`, `--config <absolute-path>`, `--profile <name>`.
 `exec` also accepts `--command`, `--confirm`, `--timeout`, `--output-limit`, `--detach`, `--request-key`, `--sudo` and `--connection`.
 `--detach`, `--request-key`, `--sudo`, `--connection` and the `execution` and `connection` commands depend on the Artium host extension.
+`execution list`, `execution show` and `execution cancel` are managed (Artium) only; standalone calls return `HOSTED_REQUIRED`.
 Run `ssh-axi <command> --help` for the exact flags of each command.
 Help, discovery, profile inspection and credential status open no SSH transports.
 
 Native execution is one-shot.
+Native `doctor` also checks the write journal before authentication, creating an empty journal if needed without recording an execution.
+The journal defaults to `$XDG_STATE_HOME/ssh-axi/writes.log` or `~/.local/state/ssh-axi/writes.log`.
+Its parent directories must be protected against replacement, including group write access even for user-private groups.
+If a parent is group-writable, remove that permission with `chmod g-w` on the directory named in the error, or set `SSH_AXI_WRITE_LOG` to an absolute path under protected directories.
 Agents, forwarding and interactive shells are unavailable.
 
 ### Hosted use with Artium

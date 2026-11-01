@@ -45,7 +45,7 @@ export function readPrivateFile(file: string, secret: boolean): string {
     const info = lstatSync(parent)
     if (!info.isDirectory() || info.isSymbolicLink() || (info.uid !== process.getuid!() && info.uid !== 0)
       || ((info.mode & 0o022) !== 0 && !(info.uid === 0 && (info.mode & 0o1000) !== 0))) {
-      throw new SshError('CONFIG_INSECURE', 'Private file parents must be owned and protected against replacement.')
+      throw new SshError('CONFIG_INSECURE', `Private file parent ${JSON.stringify(parent)} must be an actual directory owned by this user or root and protected against replacement. Remove group write access with chmod g-w (and other write access with chmod o-w), or select a protected location.`)
     }
     parent = dirname(parent)
   }
