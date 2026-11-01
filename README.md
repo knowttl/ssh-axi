@@ -52,6 +52,7 @@ The strict profile contract is shipped as `axi-credential.schema.json`.
 Keys and passphrases accept environment or protected-file SecretRefs only.
 Secret values and inline private keys are refused in JSON and arguments.
 An omitted private-key reference defaults to `SSH_AXI_PRIVATE_KEY`; the passphrase defaults to `SSH_AXI_PASSPHRASE`.
+`auth status` reports credential availability and sources as `env:<name>` or `protected file`, without displaying secret values or file paths or checking network authentication.
 Linux secret files must be owned by the caller, regular, protected from group/other access and reachable through protected directories without symlinks.
 Configuration files must also be owned and protected against group/other writes.
 
