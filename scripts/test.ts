@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 // The namespace has only loopback and no default route. It covers every test
@@ -16,7 +17,7 @@ if (privateTmp.status !== 0) process.exit(1)
 
 {
   // Keep the package manager's store and installed fixture on the same filesystem.
-  const root = mkdtempSync(join(process.cwd(), '.ssh-axi-test-'))
+  const root = mkdtempSync(join(homedir(), '.ssh-axi-test-'))
   let status = 1
   try {
     const { name, version, dependencies, devDependencies } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
