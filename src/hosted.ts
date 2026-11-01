@@ -1,5 +1,5 @@
 import { encode } from '@toon-format/toon'
-import { parseArguments } from './arguments.js'
+import { commandHelp, parseArguments } from './arguments.js'
 import { configPath, loadConfiguration, selectProfile } from './profile.js'
 import { doctor, executeCommand } from './doctor.js'
 import type { ExecutionSettings } from './authenticate.js'
@@ -20,6 +20,10 @@ process.once('message', async (message: unknown) => {
     if (parsed.config || process.argv.includes('--profile')) throw new SshError('USAGE', 'Hosted profile overrides are refused.', 2)
     const context = message as Context
     if (context.revision !== 1 || !Array.isArray(context.hosts)) throw new SshError('IPC_INVALID', 'Incompatible host context.')
+    if (parsed.help) {
+      output(commandHelp(parsed.command, true))
+      return
+    }
     if (context.execution) {
       if (context.hosts.length !== 1) throw new SshError('IPC_INVALID', 'A single selected execution host is required.')
       const cancellation = new AbortController()
@@ -37,9 +41,7 @@ process.once('message', async (message: unknown) => {
       } finally { process.off('SIGTERM', cancel); process.off('SIGINT', cancel) }
       return
     }
-    if (parsed.help) {
-      output({ description: 'Discover granted hosts and run confirmed bounded commands.', commands: ['host list', 'host show <host>', 'doctor <host>', 'exec <host> --command <text> --confirm', 'execution list', 'execution show <id>', 'execution cancel <id> --confirm'], flags: '--help, --json' })
-    } else if (parsed.command === '' || parsed.command === 'host list') {
+    if (parsed.command === '' || parsed.command === 'host list') {
       output({ hosts: context.hosts, count: context.hosts.length,
         ...(context.hosts.length ? {} : { message: 'No granted hosts found.' }), help: ['ssh-axi host show <host>', 'ssh-axi doctor <host>'] })
     } else {

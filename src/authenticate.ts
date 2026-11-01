@@ -12,7 +12,7 @@ export interface ExecutionResult {
   outcome: 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'unknown'
   remoteExit: number | null
   remoteSignal: string | null
-  termination: 'remote-exit' | 'unknown'
+  termination: 'remote-exit' | 'deadline' | 'unknown'
   stdout: ReturnType<Output['finish']>
   stderr: ReturnType<Output['finish']>
   durationMs: number
@@ -136,7 +136,7 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
             if (outcome === 'completed') outcome = 'failed'
           }
           resolve({ address, outcome, remoteExit, remoteSignal,
-            termination: remoteExit !== null || remoteSignal !== null ? 'remote-exit' : 'unknown',
+            termination: remoteExit !== null || remoteSignal !== null ? outcome === 'timed_out' ? 'deadline' : 'remote-exit' : 'unknown',
             ...streams, durationMs: Math.round(performance.now() - started), ...(diagnostic ? { diagnostic } : {}) })
         }
         const terminate = () => {

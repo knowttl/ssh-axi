@@ -61,11 +61,13 @@ ssh-axi exec <host> --command <text> --confirm
 
 Shared flags: `--json`, `--help`, `--config <absolute-path>`, `--profile <name>`.
 `exec` also accepts `--command`, `--confirm`, `--timeout`, `--output-limit`, `--detach`, `--request-key`, `--sudo` and `--connection`.
-`--detach`, `--request-key`, `--sudo`, `--connection` and the `execution` and `connection` commands depend on the Artium host extension.
+`--detach`, `--request-key`, `--sudo` and `--connection` depend on the Artium host extension.
+`execution list`, `execution show`, `execution cancel` and the `connection` commands are managed (Artium) only; standalone calls return `HOSTED_REQUIRED`.
 Run `ssh-axi <command> --help` for the exact flags of each command.
 Help, discovery, profile inspection and credential status open no SSH transports.
 
 Native execution is one-shot.
+Native `doctor` also checks [write journal custody](#safety) before authentication without reading existing journal contents, creating an empty journal if needed without recording an execution.
 Agents, forwarding and interactive shells are unavailable.
 
 ### Hosted use with Artium
@@ -132,8 +134,12 @@ Ctrl+C requests cancellation of the accepted execution ID.
 - `SSH_AXI_READ_ONLY=true` rejects arbitrary execution before opening a transport or writing a command journal.
 - Commands must contain 1-16384 UTF-8 bytes and no NUL.
 - Known managed secrets and encoded variants are rejected before command journaling.
-- Native command intents are written durably to `~/.local/state/ssh-axi/writes.log`, or beneath an absolute `XDG_STATE_HOME`.
+- Native command intents are written durably to `$XDG_STATE_HOME/ssh-axi/writes.log` when `XDG_STATE_HOME` is absolute, otherwise to `~/.local/state/ssh-axi/writes.log`.
 - `SSH_AXI_WRITE_LOG` selects an absolute protected journal path.
+- The journal must be a regular file owned by the caller with no group or other access.
+- Journal parent directories must be owned by the caller or root, without symlinks or group or other write access, except for root-owned sticky directories.
+  User-private groups do not exempt group-writable parents.
+  Remove write permissions with `chmod g-w` or `chmod o-w` on the directory named in the error, or select a protected journal path with `SSH_AXI_WRITE_LOG`.
 - No local shell is invoked; the exact command text is sent to the remote SSH exec channel.
 - Remote stdin is closed without forwarding input, and both output streams continue draining.
 - Native Ctrl+C requests cancellation through the private worker.
@@ -234,6 +240,8 @@ Both streams are drained, retaining 65536 bytes each by default.
 `--full` never bypasses retention or executes another command.
 More than 16 MiB of combined received output triggers cancellation.
 Results carry separate remote exit or signal, received and retained byte counts, truncation and encoding-loss flags.
+`termination` is `deadline` when a timed-out command returns a remote exit or signal, and `remote-exit` for other reported remote exits or signals.
+Without remote status, `termination` remains `unknown`, including after deadline-triggered local teardown; see [Unknown outcomes](#unknown-outcomes).
 
 ## Limitations
 
