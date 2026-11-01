@@ -20,7 +20,7 @@ const host = ssh2.utils.parseKey(hostPrivateKey)
 if (host instanceof Error || Array.isArray(host)) throw new Error('Cannot generate the disposable host key')
 export const hostKey = `${host.type} ${host.getPublicSSH().toString('base64')}`
 
-export async function peer(stall = false, address = '127.0.0.1', port = 0, execute?: (command: string, stream: ssh2.ServerChannel, session: ssh2.Session) => void) {
+export async function peer(stall = false, address = '127.0.0.1', port = 0, execute?: (command: string, stream: ssh2.ServerChannel, session: ssh2.Session, transportId: number) => void) {
   const observations = { transports: 0, auth: 0, commands: 0, channels: 0, closed: 0, addresses: [] as string[], commandBytes: [] as string[], signals: [] as string[] }
   let observedAuth: (() => void) | undefined
   let observedClose: (() => void) | undefined
@@ -30,6 +30,7 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0, execu
   const signalled = new Promise<void>(resolve => { observedSignal = resolve })
   const server = new ssh2.Server({ hostKeys: [hostPrivateKey] }, client => {
     observations.transports++
+    const transportId = observations.transports
     client.on('error', () => {})
     client.on('close', () => { observations.closed++; observedClose!() })
     client.on('authentication', context => {
@@ -49,7 +50,7 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0, execu
       session.on('signal', (_accept, _reject, info) => { observations.signals.push(info.name); observedSignal() })
       session.on('exec', (accept, reject, info) => {
         observations.commands++; observations.commandBytes.push(info.command)
-        if (execute) execute(info.command, accept(), session)
+        if (execute) execute(info.command, accept(), session, transportId)
         else reject()
       })
     })

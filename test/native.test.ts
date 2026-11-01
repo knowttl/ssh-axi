@@ -5,6 +5,8 @@ import { join, resolve } from 'node:path'
 import { decode } from '@toon-format/toon'
 import { temporary, run, configuration, peer, privateKey, passphrase, digest } from './support.ts'
 import matrix from './fixtures/host-auth.json' with { type: 'json' }
+import { fork } from 'node:child_process'
+import type { ExecutionResult } from '../dist/authenticate.js'
 
 const scratch = await temporary()
 const prefix = join(scratch.root, 'installed')
@@ -29,6 +31,60 @@ before(async () => {
 })
 after(() => scratch.close())
 const cli = (args: string[], extra: NodeJS.ProcessEnv = {}) => run(executable, args, { ...environment, ...extra })
+
+async function connectionWorker(profile: Parameters<typeof configuration>[1][string]) {
+  const privateHome = await temporary()
+  await configuration(privateHome.root, { artium: profile })
+  const child = fork(join(prefix, 'node_modules/@knowttl/ssh-axi/dist/connection-worker.js'), [], {
+    execArgv: [], env: { HOME: privateHome.root, XDG_CONFIG_HOME: join(privateHome.root, 'config'),
+      TEST_PRIVATE_KEY: privateKey, TEST_PASSPHRASE: passphrase }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
+  const exited = new Promise<void>(resolve => child.once('exit', () => resolve()))
+  let sequence = 0
+  const request = (operation: string, settings?: unknown) => new Promise<{ ok: boolean, result: Partial<ExecutionResult>, error?: { code: string } }>(resolve => {
+    child.once('message', value => resolve(value as never))
+    child.send({ revision: 2, id: String(++sequence), operation, ...(settings ? { settings } : {}) })
+  })
+  return { request, close: async () => { if (child.connected) await request('close'); await exited; await privateHome.close() } }
+}
+
+test('installed connection workers reuse separate transports and close only their own transport', async () => {
+  const identities: number[] = []
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream, _session, id) => {
+    identities.push(id); stream.write('fresh process\n'); stream.exit(0); stream.end()
+  })
+  const alice = await connectionWorker(server.profile)
+  const bob = await connectionWorker(server.profile)
+  const settings = { command: 'fixture:fresh', timeout: 60, outputLimit: 65536 }
+  try {
+    assert.equal((await alice.request('open')).ok, true)
+    assert.equal((await bob.request('open')).ok, true)
+    assert.equal((await alice.request('exec', settings)).result.outcome, 'completed')
+    assert.equal((await alice.request('exec', settings)).result.stdout?.text, 'fresh process\n')
+    await bob.request('exec', settings)
+    await alice.close()
+    await bob.request('exec', settings)
+    assert.deepEqual(identities, [1, 1, 2, 2])
+    assert.equal(server.observations.transports, 2)
+  } finally { await bob.close(); await alice.close(); await server.close() }
+})
+
+test('installed connection worker protects secrets on a later command after idle reuse', async () => {
+  const server = await peer(false, '127.0.0.1', 0, (command, stream) => {
+    stream.write(command === 'fixture:later' ? Buffer.from(passphrase).toString('base64') : 'safe\n')
+    stream.exit(0); stream.end()
+  })
+  const worker = await connectionWorker(server.profile)
+  try {
+    await worker.request('open')
+    const settings = { command: 'fixture:first', timeout: 60, outputLimit: 65536 }
+    assert.equal((await worker.request('exec', settings)).result.stdout?.text, 'safe\n')
+    const result = await worker.request('exec', { ...settings, command: 'fixture:later' })
+    assert.equal(result.result.stdout?.text, '')
+    assert.equal(result.result.stdout?.withheld, true)
+    assert.equal(result.result.outcome, 'failed')
+    assert.equal(server.observations.transports, 1)
+  } finally { await worker.close(); await server.close() }
+})
 
 test('an installed package discovers its offline empty state in both formats', async () => {
   const json = await cli(['host', 'list', '--json'])

@@ -76,7 +76,57 @@
         "output-limit": "string",
         "detach": "boolean",
         "request-key": "string",
+        "sudo": "boolean",
+        "connection": "string"
+      },
+      "effect": "write"
+    },
+    {
+      "command": "connection open",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "idle-timeout": "string",
         "sudo": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "connection list",
+      "arguments": 0,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "connection show",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "connection set",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "idle-timeout": "string"
+      },
+      "effect": "read"
+    },
+    {
+      "command": "connection close",
+      "arguments": 1,
+      "flags": {
+        "help": "boolean",
+        "json": "boolean",
+        "confirm": "boolean"
       },
       "effect": "write"
     },

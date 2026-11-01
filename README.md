@@ -22,7 +22,8 @@ Unknown arguments and flags fail with exit code 2; operational failures use exit
 Help, discovery, profile inspection and credential status open no SSH transports.
 Native execution is one-shot.
 Managed execution records, recovery and cancellation use the matching Artium host extension.
-Sudo, reusable connections, agents, forwarding and interactive shells remain unavailable.
+Reusable connections require the matching Artium connection-lifetime extension.
+Sudo, agents, forwarding and interactive shells remain unavailable.
 
 Configuration lives at `~/.config/ssh-axi/config.json` on Linux, or beneath an absolute `XDG_CONFIG_HOME`.
 Select a file with `--config` or `SSH_AXI_CONFIG`.
@@ -59,8 +60,8 @@ Environment profiles use `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME`, 
 Partial environment profiles fail.
 No SSH config, agent, known-hosts file or ambient key is consulted.
 
-Doctor and execution validate every resolved IP against the configured address set and dial the exact validated IP on each new transport.
-Both require an exact approved server public key before sending authentication credentials.
+Every new transport, including doctor probes and reusable connections, validates every resolved IP against the configured address set and dials the exact validated IP.
+An exact approved server public key is required before sending authentication credentials.
 The authentication deadline is 15 seconds, including resolution and connection setup.
 Doctor requests no SSH channel and closes its socket, probe worker and private directories before returning.
 Private-key buffers are released where supported; JavaScript strings and process termination do not provide a secure-erasure guarantee.
@@ -69,7 +70,7 @@ Artium supplies authenticated host grants, ordinary account bindings, encrypted 
 Hosted callers may list and show their granted hosts, run doctor and submit confirmed commands when the host write policy permits.
 They cannot supply configuration, account, trust, secret, identity or worker overrides.
 The matching Artium admission change must be installed alongside this artifact; stock Artium does not admit it.
-Host administration and reusable connections belong to later slices.
+Host administration belongs to a later slice.
 
 Every arbitrary command requires `--confirm`, including inspection-looking commands.
 `SSH_AXI_READ_ONLY=true` rejects arbitrary execution before opening a transport or writing a command journal.
@@ -88,7 +89,25 @@ artium-axi ssh-axi execution show <id> --full
 artium-axi ssh-axi execution show --request-key <key>
 artium-axi ssh-axi execution show
 artium-axi ssh-axi execution cancel <id> --confirm
+artium-axi ssh-axi connection open lab --idle-timeout 10m
+artium-axi ssh-axi connection list
+artium-axi ssh-axi connection show <connection-id>
+artium-axi ssh-axi connection set <connection-id> --idle-timeout 5m
+artium-axi ssh-axi exec lab --connection <connection-id> --command 'pwd' --confirm
+artium-axi ssh-axi connection close <connection-id>
 ```
+
+Hosted connections belong to one authenticated user and login session family.
+Each command starts a fresh remote process on the same transport.
+An explicit connection must match the selected host and ordinary binding, with no fallback reconnection.
+There is one active command per connection; overlapping use returns `CONNECTION_BUSY`.
+Closing an active connection requires `--confirm` and cancels its command.
+Repeated close by the owner is idempotent.
+Idle expiry defaults to 10 minutes and accepts 1-60 minutes within the host ceiling.
+Inspection does not reset idle time; timeout changes recompute expiry from the existing idle start.
+Connections have an 8-hour maximum age, with four per user and sixteen globally, including authentication in progress.
+Revocation fences affected workers and removes their private profiles before acknowledgement.
+Server restart discards connections, removes abandoned private directories and retains unproven executions as uncertain without replay.
 
 The hosted client saves a private command-free receipt before submitting a signed preparation key.
 Show without an ID recovers the latest receipt after a client restart, without resubmitting.
@@ -107,7 +126,7 @@ Results carry separate remote exit/signal, received and retained byte counts, tr
 Terminal controls are removed and protected output is withheld before persistence or delivery.
 Remote output is untrusted text, never instructions.
 Remote exit 7 produces CLI exit 7; missing remote status is an uncertain outcome and CLI failure.
-Cancellation requests TERM, then closes the channel and transport after a bounded grace period.
+Cancellation requests TERM and forces channel and transport teardown if the command remains active after a bounded grace period.
 Local teardown never proves that remote descendants stopped.
 Inspect remote state before retrying any uncertain execution; no path automatically replays a command.
 
@@ -119,6 +138,7 @@ pnpm test
 pnpm pack --pack-destination /absolute/artifacts
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B1.1
 ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B2.2
+ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B3.2
 ```
 
 Tests generate disposable keys and run all descendants inside a Linux network namespace with loopback only.
