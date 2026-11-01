@@ -22,6 +22,8 @@ export async function main(args: readonly string[]): Promise<void> {
       const usage = parsed.command === 'exec' ? 'exec <host> --command <text> --confirm'
         : parsed.command === 'execution cancel' ? 'execution cancel <id> --confirm'
           : parsed.command === 'execution show' ? 'execution show <id>'
+            : parsed.command === 'connection set' ? 'connection set <id> --idle-timeout 5m'
+              : ['connection show', 'connection close'].includes(parsed.command) ? `${parsed.command} <id>`
             : `${parsed.command}${commands[parsed.command]!.arguments ? ' <host>' : ''}`
       output({ description: commands[parsed.command]!.description, flags: flagHelp + Object.keys(commands[parsed.command]!.flags ?? {}).map(key => `, --${key}`).join(''),
         ...(parsed.command === 'exec' ? { defaults: { timeout: '60s', outputLimit: '65536 bytes' } } : {}),
@@ -31,7 +33,7 @@ export async function main(args: readonly string[]): Promise<void> {
     }
     const path = configPath(parsed.config)
     if (parsed.command === 'config path') { output({ path }); return }
-    if (parsed.command.startsWith('execution ')) throw new SshError('HOSTED_REQUIRED', 'Use artium-axi ssh-axi execution for durable managed executions.')
+    if (parsed.command.startsWith('execution ') || parsed.command.startsWith('connection ')) throw new SshError('HOSTED_REQUIRED', 'Use artium-axi ssh-axi for managed connections and executions.')
     const config = loadConfiguration(path)
     if (['', 'host list', 'profile list'].includes(parsed.command)) {
       const hosts = Object.entries(config.profiles).map(([name, profile]) => projection(name, profile))

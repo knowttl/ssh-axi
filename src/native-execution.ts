@@ -11,7 +11,7 @@ import type { parseArguments } from './arguments.js'
 export async function executeNative(host: string, profile: Profile, parsed: ReturnType<typeof parseArguments>) {
   if (parsed.values.confirm !== true) throw new SshError('CONFIRM_REQUIRED', 'Every arbitrary command requires --confirm.', 2)
   if (process.env.SSH_AXI_READ_ONLY && process.env.SSH_AXI_READ_ONLY !== 'false' && process.env.SSH_AXI_READ_ONLY !== '0') throw new SshError('READ_ONLY', 'Arbitrary execution is disabled by read-only policy.')
-  if (parsed.values.sudo || parsed.values.detach || parsed.values['request-key']) throw new SshError('HOSTED_REQUIRED', 'This option requires a managed execution and matching host grants.')
+  if (parsed.values.sudo || parsed.values.detach || parsed.values['request-key'] || parsed.values.connection) throw new SshError('HOSTED_REQUIRED', 'This option requires a managed execution and matching host grants.')
   if (typeof parsed.values.command !== 'string') throw new SshError('USAGE', 'Use --command <text> --confirm.', 2)
   const command = parsed.values.command
   checkCommand(command, [resolveSecret(profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)!, resolveSecret(profile.passphrase, 'SSH_AXI_PASSPHRASE', false) ?? ''])
