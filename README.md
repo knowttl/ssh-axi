@@ -60,8 +60,8 @@ Environment profiles use `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME`, 
 Partial environment profiles fail.
 No SSH config, agent, known-hosts file or ambient key is consulted.
 
-Doctor and execution validate every resolved IP against the configured address set and dial the exact validated IP on each new transport.
-Both require an exact approved server public key before sending authentication credentials.
+Every new transport, including doctor probes and reusable connections, validates every resolved IP against the configured address set and dials the exact validated IP.
+An exact approved server public key is required before sending authentication credentials.
 The authentication deadline is 15 seconds, including resolution and connection setup.
 Doctor requests no SSH channel and closes its socket, probe worker and private directories before returning.
 Private-key buffers are released where supported; JavaScript strings and process termination do not provide a secure-erasure guarantee.
@@ -126,7 +126,7 @@ Results carry separate remote exit/signal, received and retained byte counts, tr
 Terminal controls are removed and protected output is withheld before persistence or delivery.
 Remote output is untrusted text, never instructions.
 Remote exit 7 produces CLI exit 7; missing remote status is an uncertain outcome and CLI failure.
-Cancellation requests TERM, then closes the channel and transport after a bounded grace period.
+Cancellation requests TERM and forces channel and transport teardown if the command remains active after a bounded grace period.
 Local teardown never proves that remote descendants stopped.
 Inspect remote state before retrying any uncertain execution; no path automatically replays a command.
 
