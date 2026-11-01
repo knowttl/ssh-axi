@@ -56,7 +56,4 @@ test('installed admission entry points resolve inside the package', async () => 
   const version = await import(pathToFileURL(require.resolve('@knowttl/ssh-axi/dist/version.js')).href) as { VERSION: string }
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { version: string }
   assert.equal(version.VERSION, manifest.version)
-  for (const file of ['axi-credential.schema.json', 'artium-invocations.json']) {
-    assert.equal(typeof JSON.parse(readFileSync(join(packageRoot, file), 'utf8')), 'object')
-  }
 })

@@ -1,7 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // The namespace has only loopback and no default route. It covers every test
@@ -17,17 +16,20 @@ if (privateTmp.status !== 0) process.exit(1)
 
 {
   // Keep the package manager's store and installed fixture on the same filesystem.
-  const root = mkdtempSync(join(homedir(), '.ssh-axi-test-'))
+  const root = mkdtempSync(join(process.cwd(), '.ssh-axi-test-'))
   let status = 1
   try {
-    const { name, version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { name: string, version: string }
+    const { name, version, dependencies, devDependencies } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      name: string, version: string, dependencies: Record<string, string>, devDependencies: Record<string, string>
+    }
     const prefix = join(root, 'installed')
     mkdirSync(prefix)
-    writeFileSync(join(prefix, 'package.json'), '{"private":true}')
+    writeFileSync(join(prefix, 'package.json'), JSON.stringify({ private: true, dependencies, devDependencies }))
+    copyFileSync(new URL('../pnpm-lock.yaml', import.meta.url), join(prefix, 'pnpm-lock.yaml'))
     const tarball = join(root, `${name.replace('@', '').replace('/', '-')}-${version}.tgz`)
     const commands: [string, string[]][] = [
       [process.execPath, [process.env.npm_execpath!, 'pack', '--pack-destination', root]],
-      [process.execPath, [process.env.npm_execpath!, '--dir', prefix, 'add', '--offline', tarball]],
+      [process.execPath, [process.env.npm_execpath!, '--dir', prefix, 'add', '--offline', '--prod', tarball]],
       [process.execPath, ['--test', ...(process.argv.length > 3 ? process.argv.slice(3) : ['test/package-contract.test.ts', 'test/native.test.ts', 'test/authentication.test.ts', 'test/execution.test.ts', 'test/artium.test.ts'])]],
     ]
     for (const [command, args] of commands) {
