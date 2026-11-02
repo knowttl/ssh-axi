@@ -283,6 +283,10 @@ ARTIUM_FIXTURE_ROOT=/absolute/frozen-export pnpm verify:journey -- --slice B1.1
 ```
 
 The journey slices are B1.1, B2.1, B2.2, B3.1, B3.2, B4.1, B4.2 and B4.3.
+B1 and B2 slices run the fixture's admission suite without requiring later-stage conformance checks.
+B3 slices run the admission suite and require connection-lifetime and recovery conformance.
+B4 slices also run the rotation suite and require administration, sudo, audit and rotation conformance, retaining the B3 requirements.
+With `ARTIUM_FIXTURE_ROOT` set, `pnpm test` defaults to the full B4.3 hosted requirements.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## Security
