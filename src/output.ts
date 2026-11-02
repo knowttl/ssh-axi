@@ -51,6 +51,8 @@ export class Output {
     this.withheld ||= containsSecret(scan, this.patterns)
     this.tail = scan.slice(-this.window)
     if (this.withheld) { this.text = ''; this.retainedBytes = 0; return }
+    // Once a codepoint does not fit, later chunks cannot extend the prefix.
+    if (this.truncated) return
     // Escape sequences can span chunks. Keep only the parser state, never an
     // unbounded pending OSC title or CSI parameter string.
     let safe = ''
@@ -69,9 +71,10 @@ export class Output {
     }
     const bytes = Buffer.from(safe)
     const remaining = this.limit - this.retainedBytes
-    let retained = bytes.subarray(0, remaining).toString('utf8')
-    // Do not introduce a replacement character by splitting a retained codepoint.
-    if (bytes.length > remaining) retained = retained.replace(/\uFFFD$/, '')
+    let end = Math.min(bytes.length, remaining)
+    // Back up to a complete codepoint without discarding a real replacement character.
+    while (end > 0 && end < bytes.length && (bytes[end]! & 0xc0) === 0x80) end--
+    const retained = bytes.subarray(0, end).toString('utf8')
     this.text += retained
     this.retainedBytes += Buffer.byteLength(retained)
     this.truncated ||= bytes.length > remaining
