@@ -203,6 +203,9 @@ Server keys require independent verification, and at most two approved keys may 
 Keys and passphrases accept environment or protected-file SecretRefs only.
 Secret values and inline private keys are refused in JSON and arguments.
 An omitted private-key reference defaults to `SSH_AXI_PRIVATE_KEY`, and the passphrase defaults to `SSH_AXI_PASSPHRASE`.
+File SecretRefs remove a leading BOM and all trailing whitespace, as required by AXI Credential Standard v2.
+Environment SecretRefs preserve the variable's exact string.
+A file SecretRef therefore cannot preserve a passphrase that ends in whitespace; use an environment SecretRef for that passphrase.
 `auth status` reports credential availability and sources as `env:<name>` or `protected file`.
 It does not display secret values or file paths, and does not check network authentication.
 Linux secret files must be owned by the caller, regular, protected from group and other access and reachable through protected directories without symlinks.
@@ -210,10 +213,13 @@ Configuration files must also be owned and protected against group and other wri
 
 ### Profile selection
 
-Precedence is explicit host or `--profile`, `SSH_AXI_PROFILE`, a complete environment profile, the default profile, then the only profile.
+Precedence is explicit host or `--profile`, `SSH_AXI_PROFILE`, environment profile selection, the default profile, then the only profile.
 An explicitly selected file profile ignores competing endpoint environment fields.
 Environment profiles use `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME`, JSON arrays in `SSH_AXI_APPROVED_HOST_KEYS` and `SSH_AXI_ALLOWED_ADDRESSES`, and the secret environment fields above.
 Partial environment profiles fail.
+Without an explicit host, `--profile` or `SSH_AXI_PROFILE`, setting even just `SSH_AXI_PRIVATE_KEY` or `SSH_AXI_PASSPHRASE` selects the environment-profile path.
+Missing endpoint or trust fields then cause `CONFIG_INVALID` in `doctor` and `auth status`, even when a default or sole file profile exists.
+Use `--profile <name>` or set `SSH_AXI_PROFILE` when a file profile relies on those credential fallbacks, for example `ssh-axi auth status --profile <name>` or `ssh-axi doctor --profile <name>`.
 
 ### Environment variables
 
