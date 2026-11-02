@@ -6,6 +6,7 @@
     "type": "git",
     "url": "git+https://github.com/knowttl/ssh-axi.git"
   },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "ssh-axi": "dist/main.js"
