@@ -111,6 +111,30 @@ test('UTF-8 chunks decode together and invalid bytes and terminal controls are r
   } finally { await server.close() }
 })
 
+for (const [boundary, outputLimit, chunks, text, receivedBytes, truncated, encodingLoss] of [
+  ['one chunk', 1, ['€X'], '', 4, true, false],
+  ['separate characters', 1, ['€', 'X'], '', 4, true, false],
+  ['split codepoint', 1, [Buffer.from([0xe2]), Buffer.from([0x82, 0xac]), 'X'], '', 4, true, false],
+  ['retained prefix', 2, ['A', '€', 'X'], 'A', 5, true, false],
+  ['exact codepoint fit', 3, ['€', 'X'], '€', 4, true, false],
+  ['complete output', 4, ['€', 'X'], '€X', 4, false, false],
+  ['replacement character in one chunk', 3, ['\uFFFDX'], '\uFFFD', 4, true, true],
+  ['separate replacement character', 3, ['\uFFFD', 'X'], '\uFFFD', 4, true, true],
+] as const) test(`retained output is a stable UTF-8 prefix with ${boundary}`, async () => {
+  const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+    for (const chunk of chunks) { stream.write(chunk); stream.stderr.write(chunk) }
+    stream.exit(0); stream.end()
+  })
+  try {
+    const result = await executeCommand(server.profile, { ...settings, outputLimit })
+    assert.equal(result.outcome, 'completed')
+    const expected = { text, receivedBytes, retainedBytes: Buffer.byteLength(text), truncated,
+      encodingLoss, withheld: false, unit: 'bytes' }
+    assert.deepEqual(result.stdout, expected)
+    assert.deepEqual(result.stderr, expected)
+  } finally { await server.close() }
+})
+
 test('deadline after stdin EOF signals an ignoring peer then tears down locally with unknown termination', { timeout: 10000 }, async () => {
   let stdinClosed = false
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {

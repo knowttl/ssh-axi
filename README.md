@@ -235,8 +235,10 @@ Unknown arguments and flags fail with exit code 2.
 Operational failures use exit code 1.
 A remote exit such as 7 produces the same CLI exit code.
 The default command deadline is 60 seconds, adjustable with `--timeout 1s` through `600s` within host ceilings.
-Both streams are drained, retaining 65536 bytes each by default.
+Both streams are drained, retaining up to 65536 bytes each by default.
 `--output-limit <bytes>` sets retention from 0 through 1048576 bytes per stream, subject to managed host ceilings.
+Retained text is a complete UTF-8 prefix of sanitized output, independent of SSH chunk boundaries.
+If the next codepoint does not fit, retention stops even if space remains; complete replacement characters are preserved.
 `--full` never bypasses retention or executes another command.
 More than 16 MiB of combined received output triggers cancellation.
 Results carry separate remote exit or signal, received and retained byte counts, truncation and encoding-loss flags.
