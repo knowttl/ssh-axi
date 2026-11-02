@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.2](https://github.com/knowttl/ssh-axi/compare/ssh-axi-v0.1.1...ssh-axi-v0.1.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* license the package under MIT ([#23](https://github.com/knowttl/ssh-axi/issues/23)) ([c7b1e22](https://github.com/knowttl/ssh-axi/commit/c7b1e221be9306f573da3d237ae54b6bf6b1e2c3))
+* preserve UTF-8 output prefixes across SSH chunks ([#19](https://github.com/knowttl/ssh-axi/issues/19)) ([76bedbe](https://github.com/knowttl/ssh-axi/commit/76bedbea88bfff2439346c04dc25c9ae871cb891))
+* scope hosted conformance checks to the selected journey slice ([#21](https://github.com/knowttl/ssh-axi/issues/21)) ([45c636d](https://github.com/knowttl/ssh-axi/commit/45c636da0339cab23585a180c79438b7fc6e3dbc))
+
 ## [0.1.1](https://github.com/knowttl/ssh-axi/compare/ssh-axi-v0.1.0...ssh-axi-v0.1.1) (2026-11-01)
 
 

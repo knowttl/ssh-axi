@@ -1,6 +1,6 @@
 {
   "name": "@knowttl/ssh-axi",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Discover approved SSH hosts and execute confirmed bounded commands",
   "repository": {
     "type": "git",
