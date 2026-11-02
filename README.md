@@ -301,4 +301,4 @@ No `SECURITY.md` is present yet; this is pending.
 
 ## License
 
-No `LICENSE` file is present yet; the license is pending.
+MIT. See [`LICENSE`](LICENSE).
