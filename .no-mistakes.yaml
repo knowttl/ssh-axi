@@ -1,4 +1,3 @@
-agent: codex
 no_ci: true
 review:
   path_instructions:
