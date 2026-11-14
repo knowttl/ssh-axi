@@ -14,6 +14,7 @@ import { configuration, peer, run, temporary } from './support.ts'
 
 const password = randomBytes(24).toString('hex')
 process.env.TEST_PASSWORD = password
+process.env.TEST_EMPTY_PASSWORD = ''
 
 async function passwordPeer(mode = 'password') {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
@@ -21,6 +22,7 @@ async function passwordPeer(mode = 'password') {
   }, context => {
     if (context.method === 'password' && mode === 'expired') context.requestChange('untrusted prompt', () => context.reject())
     else if (context.method === 'password' && mode === 'password' && context.password === password) context.accept()
+    else if (context.method === 'password' && mode === 'empty' && context.password === '') context.accept()
     else if (context.method === 'keyboard-interactive' && mode !== 'password') {
       if (mode === 'zero-only') { context.prompt([], () => context.accept()); return }
       if (mode === 'zero-hidden') {
@@ -45,10 +47,10 @@ async function passwordPeer(mode = 'password') {
     } else context.reject(['password', 'keyboard-interactive'])
   })
   const { privateKey: _key, passphrase: _phrase, ...endpoint } = server.profile
-  return { ...server, profile: { ...endpoint, password: { env: 'TEST_PASSWORD' } } }
+  return { ...server, profile: { ...endpoint, password: { env: mode === 'empty' ? 'TEST_EMPTY_PASSWORD' : 'TEST_PASSWORD' } } }
 }
 
-for (const mode of ['password', 'hidden', 'zero-hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
+for (const mode of ['password', 'empty', 'hidden', 'zero-hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
   const server = await passwordPeer(mode)
   try {
     assert.deepEqual(await doctor(server.profile), { authenticated: true, address: '127.0.0.1' })

@@ -144,6 +144,8 @@ export function resolveSecret(reference: SecretRef | undefined, fallback: string
     if (error instanceof SshError) throw error
     throw new SshError('KEY_UNAVAILABLE', 'The selected protected secret file is unavailable.')
   }
-  if (value === undefined && required) throw new SshError('KEY_UNAVAILABLE', 'The selected credential is unavailable.')
+  if (required && (value === undefined || value === '' && fallback !== 'SSH_AXI_PASSWORD')) {
+    throw new SshError('KEY_UNAVAILABLE', 'The selected credential is unavailable.')
+  }
   return value
 }

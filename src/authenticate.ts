@@ -116,7 +116,7 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
         client.connect({ sock: socket, username: profile.username,
           ...(privateKey === undefined ? {} : { privateKey }),
           ...(passphrase === undefined ? {} : { passphrase }), readyTimeout: AUTHENTICATION_DEADLINE_MS,
-          ...(password === undefined ? {} : { password }),
+          ...(password === undefined ? {} : { password, tryKeyboard: true }),
           authHandler: (_remaining, partial, next) => {
             method = methods[attempt++]
             if (!method || partial) return false
