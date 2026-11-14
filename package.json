@@ -27,7 +27,7 @@
   "scripts": {
     "build": "tsc",
     "inventory:write": "node scripts/inventory.ts --write",
-    "lint": "tsc -p tsconfig.check.json && node scripts/inventory.ts",
+    "lint": "tsc -p tsconfig.check.json && node scripts/profile-secrets.ts && node scripts/inventory.ts",
     "test": "pnpm build && node scripts/test.ts",
     "verify:journey": "pnpm build && node scripts/journey.ts",
     "prepack": "pnpm build"

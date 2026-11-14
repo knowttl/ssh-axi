@@ -17,6 +17,21 @@ export interface Profile {
   passphrase?: SecretRef
 }
 export interface Configuration { version: 1, defaultProfile?: string, profiles: Record<string, Profile> }
+export function profileSecrets(profile: Profile, first?: 'passphrase') {
+  const definitions = [
+    { name: 'privateKey', fallback: 'SSH_AXI_PRIVATE_KEY', required: true },
+    { name: 'passphrase', fallback: 'SSH_AXI_PASSPHRASE', required: false },
+  ] as const
+  const resolve = ({ name, fallback, required }: typeof definitions[number]) => {
+    const reference = profile[name] ?? { env: fallback }
+    return { name, required, reference, value: resolveSecret(reference, fallback, required),
+      source: 'file' in reference ? 'protected file' : `env:${reference.env}` }
+  }
+  const prioritized = definitions.find(secret => secret.name === first)
+  const resolved = prioritized && resolve(prioritized)
+  return definitions.map(secret => secret === prioritized ? resolved! : resolve(secret))
+}
+
 const validate = new Ajv({ strict: false }).compile<Profile>(schema)
 const profileName = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 

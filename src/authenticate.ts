@@ -2,7 +2,7 @@ import { lookup } from 'node:dns/promises'
 import { BlockList, isIP, connect, type Socket } from 'node:net'
 import ssh2 from 'ssh2'
 import { SshError } from './errors.js'
-import { resolveSecret, type Profile } from './profile.js'
+import { profileSecrets, type Profile } from './profile.js'
 import { checkCommand, Output, secretPatterns } from './output.js'
 
 export const AUTHENTICATION_DEADLINE_MS = 15_000
@@ -27,7 +27,7 @@ export async function authenticate(profile: Profile): Promise<{ authenticated: t
 
 export async function execute(profile: Profile, settings: ExecutionSettings, signal?: AbortSignal): Promise<ExecutionResult> {
   validateSettings(settings)
-  checkCommand(settings.command, [resolveSecret(profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)!, resolveSecret(profile.passphrase, 'SSH_AXI_PASSPHRASE', false) ?? ''])
+  checkCommand(settings.command, profileSecrets(profile).map(secret => secret.value ?? ''))
   const started = performance.now()
   const connection = await openTransport(profile, signal)
   try { return { ...await connection.execute(settings, signal), durationMs: Math.round(performance.now() - started) } }
@@ -44,9 +44,10 @@ function validateSettings(settings: ExecutionSettings) {
 // Each command starts a fresh channel. The private worker retains only the
 // authenticated transport and its lifetime secret protection between commands.
 export async function openTransport(profile: Profile, signal?: AbortSignal) {
-  const passphrase = resolveSecret(profile.passphrase, 'SSH_AXI_PASSPHRASE', false)
-  const privateKey = Buffer.from(resolveSecret(profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)!)
-  const secrets = [privateKey.toString(), passphrase ?? '']
+  const resolved = profileSecrets(profile, 'passphrase')
+  const passphrase = resolved.find(secret => secret.name === 'passphrase')!.value
+  const privateKey = Buffer.from(resolved.find(secret => secret.name === 'privateKey')!.value!)
+  const secrets = resolved.map(secret => secret.value ?? '')
   const patterns = secretPatterns(secrets)
   const client = new ssh2.Client()
   let socket: Socket | undefined

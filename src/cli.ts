@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { closeSync } from 'node:fs'
-import { configPath, loadConfiguration, selectProfile, resolveSecret, type Profile } from './profile.js'
+import { configPath, loadConfiguration, selectProfile, profileSecrets, type Profile } from './profile.js'
 import { doctor } from './doctor.js'
 import { SshError } from './errors.js'
 import { executeNative, openWriteJournal } from './native-execution.js'
@@ -44,12 +44,10 @@ export async function main(args: readonly string[]): Promise<void> {
     }
     if (parsed.command === 'host show') { output({ host: projection(selected.name, selected.profile) }); return }
     if (parsed.command === 'auth status') {
-      const key = resolveSecret(selected.profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)
-      const passphrase = resolveSecret(selected.profile.passphrase, 'SSH_AXI_PASSPHRASE', false)
-      const source = (reference: Profile['privateKey'], fallback: string) => reference && 'file' in reference ? 'protected file' : `env:${reference?.env ?? fallback}`
-      output({ profile: selected.name, privateKey: key ? 'available' : 'missing', passphrase: passphrase ? 'available' : 'absent',
-        privateKeySource: source(selected.profile.privateKey, 'SSH_AXI_PRIVATE_KEY'),
-        passphraseSource: source(selected.profile.passphrase, 'SSH_AXI_PASSPHRASE'), network: 'not checked' })
+      const secrets = profileSecrets(selected.profile)
+      output({ profile: selected.name,
+        ...Object.fromEntries(secrets.map(secret => [secret.name, secret.value ? 'available' : secret.required ? 'missing' : 'absent'])),
+        ...Object.fromEntries(secrets.map(secret => [`${secret.name}Source`, secret.source])), network: 'not checked' })
       return
     }
     closeSync(openWriteJournal())
