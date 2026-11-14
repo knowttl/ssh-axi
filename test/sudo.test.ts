@@ -1,0 +1,102 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import { fork } from 'node:child_process'
+import { once } from 'node:events'
+import { executeCommand } from '../dist/doctor.js'
+import { configuration, peer, temporary } from './support.ts'
+
+const password = randomBytes(24).toString('hex')
+process.env.TEST_SUDO_PASSWORD = password
+const settings = { command: 'synthetic sudo command', timeout: 1, outputLimit: 65536 }
+
+for (const mode of ['matching', 'absent', 'different', 'repeated', 'echoed', 'partial'] as const) {
+  test(`sudo ${mode} prompt controls one password line through the execution worker`, async () => {
+    const sudoPrompt = randomBytes(24).toString('hex')
+    let input = ''
+    const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
+      stream.on('data', (bytes: Buffer) => { input += String(bytes) })
+      stream.on('end', () => {
+        if (mode === 'repeated') stream.stderr.write(sudoPrompt)
+        if (mode === 'echoed') stream.write(input)
+        else stream.write('command output')
+        stream.exit(mode === 'repeated' ? 1 : 0); stream.end()
+      })
+      if (mode === 'absent' || mode === 'different' || mode === 'partial') {
+        stream.stderr.write(mode === 'different' ? 'Password: ' : mode === 'partial' ? sudoPrompt.slice(0, -1) : '')
+        stream.write('command output'); stream.exit(0); stream.end()
+      } else {
+        stream.stderr.write('before ')
+        for (const character of sudoPrompt) stream.stderr.write(character)
+        stream.stderr.write(' after')
+      }
+    }, context => {
+      if (context.method === 'password' && context.password === password) context.accept()
+      else context.reject()
+    })
+    const { privateKey: _key, passphrase: _phrase, ...host } = server.profile
+    const profile = { ...host, password: { env: 'TEST_SUDO_PASSWORD' } }
+    try {
+      const pending = executeCommand(profile, { ...settings, sudoPrompt })
+      if (mode === 'repeated') {
+        await assert.rejects(pending, error => {
+          assert.equal((error as { code: string }).code, 'SUDO_DENIED')
+          assert.ok(!String(error).includes(password))
+          return true
+        })
+      } else {
+        const result = await pending
+        assert.equal(result.outcome, mode === 'echoed' ? 'failed' : 'completed')
+        assert.equal(result.stdout.text, mode === 'echoed' ? '' : 'command output')
+        assert.equal(result.stderr.text, mode === 'different' ? 'Password: ' : mode === 'partial' ? sudoPrompt.slice(0, -1) : mode === 'absent' || mode === 'echoed' ? '' : 'before  after')
+        assert.ok(!JSON.stringify(result).includes(password))
+      }
+      assert.equal(input, ['matching', 'repeated', 'echoed'].includes(mode) ? `${password}\n` : '')
+    } finally { await server.close() }
+  })
+}
+
+test('connection worker answers each execution with its bound credential and a fresh nonce', async () => {
+  const inputs: string[] = []
+  const server = await peer(false, '127.0.0.1', 0, (command, stream) => {
+    let input = ''
+    stream.on('data', (bytes: Buffer) => { input += String(bytes) })
+    stream.on('end', () => {
+      inputs.push(input); stream.write('completed'); stream.exit(0); stream.end()
+    })
+    stream.stderr.write(command)
+  }, context => {
+    if (context.method === 'password' && context.password === password) context.accept()
+    else context.reject()
+  })
+  const isolated = await temporary()
+  const { privateKey: _key, passphrase: _phrase, ...host } = server.profile
+  const path = await configuration(isolated.root, { artium: { ...host, password: { env: 'TEST_SUDO_PASSWORD' } } })
+  const child = fork(new URL('../dist/connection-worker.js', import.meta.url), [], {
+    execArgv: [], env: { SSH_AXI_CONFIG: path, TEST_SUDO_PASSWORD: password }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  })
+  let output = ''
+  child.stdout!.on('data', bytes => { output += String(bytes) })
+  child.stderr!.on('data', bytes => { output += String(bytes) })
+  const request = async (operation: string, execution?: typeof settings & { sudoPrompt: string }) => {
+    const response = once(child, 'message')
+    child.send({ revision: 2, id: operation, operation, ...(execution ? { settings: execution } : {}) })
+    return (await response)[0]
+  }
+  try {
+    assert.equal((await request('open')).ok, true)
+    for (const _execution of [1, 2]) {
+      const sudoPrompt = randomBytes(24).toString('hex')
+      const response = await request('exec', { ...settings, command: sudoPrompt, sudoPrompt })
+      assert.equal(response.ok, true)
+      assert.equal(response.result.stdout.text, 'completed')
+      assert.equal(response.result.stderr.text, '')
+      assert.ok(!JSON.stringify(response).includes(password))
+    }
+    assert.deepEqual(inputs, [`${password}\n`, `${password}\n`])
+    assert.equal(server.observations.transports, 1)
+    const closed = once(child, 'exit')
+    await request('close'); await closed
+    assert.equal(output, '')
+  } finally { child.kill('SIGKILL'); await server.close(); await isolated.close() }
+})

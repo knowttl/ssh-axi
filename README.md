@@ -120,6 +120,14 @@ Sudo dispatch sends `sudo -n -- /bin/sh -c <quoted-command>` through its own mat
 Pipelines and redirects remain inside that privileged shell.
 Password-required or terminal-required sudo returns `SUDO_DENIED` with administrator guidance.
 
+The hosted execution settings and revision 2 connection worker accept an optional `sudoPrompt` nonce for password sudo bindings.
+The caller generates a fresh, unpredictable nonce per execution, using 32-128 ASCII letters, digits, underscores or hyphens, and wraps the command as `sudo -S -k -p '<nonce>' -- /bin/sh -c 'exec </dev/null; <command>'` with proper shell quoting.
+Only an exact nonce on stderr triggers the selected profile's password plus one newline, followed by stdin EOF.
+The nonce is stripped from stderr even across chunk boundaries, and a repeated nonce fails with `SUDO_DENIED` without another password write.
+Without a matching nonce, no password is sent; the command must redirect stdin from `/dev/null` so passwordless sudo cannot leave it waiting for input.
+The password remains subject to output withholding, and key bindings continue using `sudo -n` without this setting.
+This transport capability requires the matching hosted caller extension to wrap commands and map sudo failures.
+
 The hosted client saves a private command-free receipt before submitting a signed preparation key.
 Show without an ID recovers the latest receipt after a client restart, without resubmitting.
 Matching resubmission returns the same execution ID, and a durable dispatch claim prevents a second SSH command.
@@ -141,7 +149,7 @@ Ctrl+C requests cancellation of the accepted execution ID.
   User-private groups do not exempt group-writable parents.
   Remove write permissions with `chmod g-w` or `chmod o-w` on the directory named in the error, or select a protected journal path with `SSH_AXI_WRITE_LOG`.
 - No local shell is invoked; the exact command text is sent to the remote SSH exec channel.
-- Remote stdin is closed without forwarding input, and both output streams continue draining.
+- Remote stdin is closed without forwarding input, and both output streams continue draining, except for the hosted sudo password exchange described above.
 - Native Ctrl+C requests cancellation through the private worker.
 - Every new transport, including doctor probes and reusable connections, validates every resolved IP against the configured address set and dials the exact validated IP.
 - An exact approved server public key is required before authentication credentials are sent.
