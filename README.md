@@ -120,15 +120,16 @@ Sudo dispatch sends `sudo -n -- /bin/sh -c <quoted-command>` through its own mat
 Pipelines and redirects remain inside that privileged shell.
 Password-required or terminal-required sudo returns `SUDO_DENIED` with administrator guidance.
 
-The hosted execution settings and revision 2 connection worker accept `sudoPrompt` and `sudoSuccess` nonces for password sudo bindings.
-For Artium A3, the caller generates two distinct, fresh, unpredictable nonces per execution, using 32-128 ASCII letters, digits, underscores or hyphens, and wraps the command as `sudo -S -k -p '<prompt>' -- /bin/sh -c 'printf %s <success>; exec </dev/null; <command>'` with proper shell quoting.
+The hosted execution settings and revision 2 connection worker accept `sudoPassword: true` for password sudo bindings.
+For Artium A3, the caller supplies the original command, and ssh-axi checks it for protected material before generating two distinct, fresh, unpredictable nonces and wrapping it as `sudo -S -k -p '<prompt>' -- /bin/sh -c 'printf %s <success>; exec </dev/null; <command>'` with proper shell quoting.
+The generated markers exclude protected material and are used for both the wrapper and stream matching.
 Only the exact prompt nonce on stderr triggers the selected profile's password plus one newline, followed by stdin EOF.
 Both markers are stripped from their respective streams even across chunk boundaries.
 After a password write, a completed sudo exchange without the success marker fails with `SUDO_DENIED`; after the marker, the command's own result applies.
 A repeated prompt does not trigger another password write.
-Without a matching nonce, no password is sent; the command must redirect stdin from `/dev/null` so passwordless sudo cannot leave it waiting for input.
+Without a matching nonce, no password is sent; the wrapper redirects stdin from `/dev/null` so passwordless sudo cannot leave the command waiting for input.
 The password remains subject to output withholding, and key bindings continue using `sudo -n` without this setting.
-This transport capability requires the matching hosted caller extension to wrap commands and map sudo failures.
+This transport capability requires the matching hosted caller extension to select password sudo mode and map sudo failures.
 
 The hosted client saves a private command-free receipt before submitting a signed preparation key.
 Show without an ID recovers the latest receipt after a client restart, without resubmitting.
