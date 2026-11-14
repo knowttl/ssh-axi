@@ -234,6 +234,24 @@ test('empty key and password status reflect authentication availability', async 
   } finally { await scratch.close(); await server.close() }
 })
 
+test('status reports missing required files but rejects a missing passphrase file', async () => {
+  const server = await passwordPeer()
+  const scratch = await temporary()
+  try {
+    const missing = { file: join(scratch.root, 'missing') }
+    const key = { ...server.profile, password: undefined, privateKey: { env: 'TEST_PRIVATE_KEY' } }
+    const path = await configuration(scratch.root, { key: { ...key, privateKey: missing },
+      password: { ...server.profile, password: missing }, passphrase: { ...key, passphrase: missing } })
+    for (const [profile, field, expected] of [['key', 'privateKey', 'missing'], ['password', 'password', 'missing'],
+      ['passphrase', 'error', 'KEY_UNAVAILABLE']] as const) {
+      const result = await run(process.execPath, [join('dist', 'main.js'), 'auth', 'status', '--profile', profile, '--config', path, '--json'], process.env)
+      assert.equal(result.code, profile === 'passphrase' ? 1 : 0)
+      const output = JSON.parse(result.stdout)
+      assert.equal(field === 'error' ? output.error.code : output[field], expected)
+    }
+  } finally { await scratch.close(); await server.close() }
+})
+
 test('credential schema requires exactly one referenced authentication method', async () => {
   const server = await passwordPeer()
   try {

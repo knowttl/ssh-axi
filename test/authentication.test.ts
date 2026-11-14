@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { authenticate, execute, openTransport } from '../dist/authenticate.js'
+import { doctor, executeCommand } from '../dist/doctor.js'
 import { peer, privateKey, passphrase, temporary } from './support.ts'
 import dns from 'node:dns/promises'
 import { syncBuiltinESMExports } from 'node:module'
@@ -20,6 +21,21 @@ test('transport and command admission preserve secret failure precedence', async
       [() => execute(profile, { command: 'true', timeout: 1, outputLimit: 1024 }), 'KEY_UNAVAILABLE'],
     ] as const) await assert.rejects(invoke, { code })
   } finally { await scratch.close() }
+})
+
+test('a missing configured passphrase file fails before authentication', async () => {
+  const scratch = await temporary()
+  const server = await peer()
+  process.env.TEST_PRIVATE_KEY = privateKey
+  try {
+    const profile = { ...server.profile, passphrase: { file: join(scratch.root, 'missing') } }
+    const settings = { command: 'true', timeout: 1, outputLimit: 1024 }
+    for (const invoke of [() => authenticate(profile), () => openTransport(profile), () => execute(profile, settings),
+      () => doctor(profile), () => executeCommand(profile, settings)]) {
+      await assert.rejects(invoke, { code: 'KEY_UNAVAILABLE' })
+    }
+    assert.equal(server.observations.transports, 0)
+  } finally { await server.close(); await scratch.close() }
 })
 
 test('a stalled peer is disconnected at the 15-second authentication deadline', async context => {

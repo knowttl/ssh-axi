@@ -27,7 +27,7 @@ export function profileSecrets(profile: Profile, first?: 'passphrase' | 'status'
   const selected = definitions.filter(secret => profile.password ? secret.name === 'password' : secret.name !== 'password')
   const resolve = ({ name, fallback, required }: typeof definitions[number]) => {
     const reference = profile[name] ?? { env: fallback }
-    return { name, required, reference, value: resolveSecret(reference, fallback, first === 'status' ? false : required),
+    return { name, required, reference, value: resolveSecret(reference, fallback, first === 'status' ? false : required, first === 'status' && required),
       source: 'file' in reference ? 'protected file' : `env:${reference.env}` }
   }
   const prioritized = selected.find(secret => secret.name === first)
@@ -135,12 +135,12 @@ export function selectProfile(config: Configuration, explicit?: string): { name:
   return { name: selected, profile: config.profiles[selected]! }
 }
 
-export function resolveSecret(reference: SecretRef | undefined, fallback: string, required: boolean): string | undefined {
+export function resolveSecret(reference: SecretRef | undefined, fallback: string, required: boolean, missingFileAllowed = false): string | undefined {
   const selected = reference ?? { env: fallback }
   let value: string | undefined
   try { value = 'env' in selected ? process.env[selected.env] : readPrivateFile(selected.file, true) }
   catch (error) {
-    if (!required && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (missingFileAllowed && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     if (error instanceof SshError) throw error
     throw new SshError('KEY_UNAVAILABLE', 'The selected protected secret file is unavailable.')
   }
