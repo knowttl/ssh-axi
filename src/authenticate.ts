@@ -3,7 +3,7 @@ import { BlockList, isIP, connect, type Socket } from 'node:net'
 import ssh2 from 'ssh2'
 import { SshError } from './errors.js'
 import { profileSecrets, type Profile } from './profile.js'
-import { checkCommand, Output, secretPatterns } from './output.js'
+import { checkCommand, containsSecret, Output, secretPatterns } from './output.js'
 
 export const AUTHENTICATION_DEADLINE_MS = 15_000
 export interface ExecutionSettings { command: string, timeout: number, outputLimit: number }
@@ -91,11 +91,12 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
       client.once('error', failure); client.once('close', failure)
       client.on('change password', () => finish(new SshError('PASSWORD_EXPIRED', 'The SSH password must be changed before authentication.')))
       client.on('keyboard-interactive', (_name, _instructions, _language, prompts, answer) => {
+        if (prompts.length === 0) { answer([]); return }
         if (password === undefined || answered || prompts.length !== 1 || prompts[0]!.echo !== false) {
           finish(new SshError('AUTH_FAILED', 'SSH authentication failed; check the selected credential.')); return
         }
         answered = true
-        answer(secrets)
+        answer([password])
       })
       signal?.addEventListener('abort', abort, { once: true })
       if (signal?.aborted) { abort(); return }
@@ -154,7 +155,8 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
           signal?.removeEventListener('abort', abort)
           active = undefined
           const streams = { stdout: stdout.finish(), stderr: stderr.finish() }
-          if (streams.stdout.withheld || streams.stderr.withheld) {
+          if (streams.stdout.withheld || streams.stderr.withheld || remoteSignal !== null && containsSecret(remoteSignal, patterns)) {
+            remoteSignal = null
             for (const stream of Object.values(streams)) { stream.text = ''; stream.retainedBytes = 0; stream.withheld = true }
             diagnostic = 'Protected output withheld.'
             if (outcome === 'completed') outcome = 'failed'

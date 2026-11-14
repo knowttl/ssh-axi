@@ -15,14 +15,16 @@ import { configuration, peer, run, temporary } from './support.ts'
 const password = randomBytes(24).toString('hex')
 process.env.TEST_PASSWORD = password
 process.env.TEST_EMPTY_PASSWORD = ''
+process.env.TEST_SHORT_PASSWORD = 'a'
 
 async function passwordPeer(mode = 'password') {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
-    stream.write(password); stream.exit(0); stream.end()
+    stream.write(mode === 'short' ? 'public' : password); stream.exit(0); stream.end()
   }, context => {
     if (context.method === 'password' && mode === 'expired') context.requestChange('untrusted prompt', () => context.reject())
     else if (context.method === 'password' && mode === 'password' && context.password === password) context.accept()
     else if (context.method === 'password' && mode === 'empty' && context.password === '') context.accept()
+    else if (context.method === 'password' && mode === 'short' && context.password === 'a') context.accept()
     else if (context.method === 'keyboard-interactive' && mode !== 'password') {
       if (mode === 'zero-only') { context.prompt([], () => context.accept()); return }
       if (mode === 'zero-hidden') {
@@ -47,8 +49,18 @@ async function passwordPeer(mode = 'password') {
     } else context.reject(['password', 'keyboard-interactive'])
   })
   const { privateKey: _key, passphrase: _phrase, ...endpoint } = server.profile
-  return { ...server, profile: { ...endpoint, password: { env: mode === 'empty' ? 'TEST_EMPTY_PASSWORD' : 'TEST_PASSWORD' } } }
+  return { ...server, profile: { ...endpoint, password: { env: mode === 'empty' ? 'TEST_EMPTY_PASSWORD' : mode === 'short' ? 'TEST_SHORT_PASSWORD' : 'TEST_PASSWORD' } } }
 }
+
+test('one-character password permits safe doctor and execution results', async () => {
+  const server = await passwordPeer('short')
+  try {
+    assert.deepEqual(await doctor(server.profile), { authenticated: true, address: '127.0.0.1' })
+    const result = await executeCommand(server.profile, { command: 'fixture', timeout: 1, outputLimit: 1024 })
+    assert.equal(result.outcome, 'completed')
+    assert.equal(result.stdout.text, 'public')
+  } finally { await server.close() }
+})
 
 for (const mode of ['password', 'empty', 'hidden', 'zero-hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
   const server = await passwordPeer(mode)
@@ -108,7 +120,7 @@ test('wrong password fails without exposing the credential', async () => {
 test('an unpinned host receives no authentication request', async () => {
   const server = await passwordPeer()
   try {
-    await assert.rejects(() => authenticate({ ...server.profile, approvedHostKeys: [] }), { code: 'TRUST_FAILED' })
+    await assert.rejects(() => authenticate({ ...server.profile, approvedHostKeys: ['ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDs'] }), { code: 'TRUST_FAILED' })
     await server.disconnected
     assert.equal(server.observations.auth, 0)
   } finally { await server.close() }
@@ -188,6 +200,24 @@ test('password status reports availability and source offline', async () => {
       assert.deepEqual(JSON.parse(result.stdout), { profile: 'fixture', password: available ? 'available' : 'missing', passwordSource: 'env:TEST_PASSWORD', network: 'not checked' })
     }
     assert.equal(server.observations.transports, 0)
+  } finally { await scratch.close(); await server.close() }
+})
+
+test('empty key and password status reflect authentication availability', async () => {
+  const server = await passwordPeer()
+  const scratch = await temporary()
+  try {
+    const empty = join(scratch.root, 'empty')
+    await writeFile(empty, '', { mode: 0o600 })
+    const key = { ...server.profile, password: undefined, privateKey: { env: 'TEST_EMPTY_PASSWORD' } }
+    const path = await configuration(scratch.root, { key, keyfile: { ...key, privateKey: { file: empty } },
+      password: { ...server.profile, password: { env: 'TEST_EMPTY_PASSWORD' } }, passwordfile: { ...server.profile, password: { file: empty } } })
+    for (const [profile, field, expected] of [['key', 'privateKey', 'missing'], ['keyfile', 'privateKey', 'missing'],
+      ['password', 'password', 'available'], ['passwordfile', 'password', 'available']] as const) {
+      const result = await run(process.execPath, [join('dist', 'main.js'), 'auth', 'status', '--profile', profile, '--config', path, '--json'], process.env)
+      assert.equal(result.code, 0, result.stderr)
+      assert.equal(JSON.parse(result.stdout)[field], expected)
+    }
   } finally { await scratch.close(); await server.close() }
 })
 

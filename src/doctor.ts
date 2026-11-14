@@ -49,7 +49,9 @@ async function supervise(profile: Profile, settings?: ExecutionSettings, signal?
         signal?.removeEventListener('abort', cancel)
         const value = response as { ok?: boolean, result?: ExecutionResult, error?: { code: string, message: string } } | undefined
         if (value?.ok && value.result) {
-          if (containsSecret(JSON.stringify(value.result), secretPatterns(values))) {
+          const result = value.result
+          if (settings && [result.stdout.text, result.stderr.text, result.remoteSignal ?? '', result.diagnostic ?? '']
+            .some(field => containsSecret(field, secretPatterns(values)))) {
             reject(new SshError('SECRET_IN_OUTPUT', 'Protected worker output withheld.'))
           } else resolve(value.result)
         }
