@@ -20,10 +20,10 @@ process.env.TEST_DIAGNOSTIC_PASSWORD = 'e'
 
 async function passwordPeer(mode = 'password') {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
-    stream.write(mode === 'short' ? 'public' : mode === 'diagnostic' ? 'e' : password); stream.exit(0); stream.end()
+    stream.write(mode === 'short' ? 'public' : mode === 'diagnostic' ? 'e' : mode === 'sanitized' ? `${password.slice(0, 2)}\x1b[31m${password.slice(2)}` : password); stream.exit(0); stream.end()
   }, context => {
     if (context.method === 'password' && mode === 'expired') context.requestChange('untrusted prompt', () => context.reject())
-    else if (context.method === 'password' && mode === 'password' && context.password === password) context.accept()
+    else if (context.method === 'password' && (mode === 'password' || mode === 'sanitized') && context.password === password) context.accept()
     else if (context.method === 'password' && mode === 'empty' && context.password === '') context.accept()
     else if (context.method === 'password' && mode === 'short' && context.password === 'a') context.accept()
     else if (context.method === 'password' && mode === 'diagnostic' && context.password === 'e') context.accept()
@@ -75,7 +75,7 @@ test('one-character password permits safe doctor and execution results', async (
   } finally { await server.close() }
 })
 
-for (const mode of ['password', 'empty', 'hidden', 'zero-hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
+for (const mode of ['password', 'empty', 'hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
   const server = await passwordPeer(mode)
   try {
     assert.deepEqual(await doctor(server.profile), { authenticated: true, address: '127.0.0.1' })
@@ -83,7 +83,7 @@ for (const mode of ['password', 'empty', 'hidden', 'zero-hidden']) test(`${mode}
   } finally { await server.close() }
 })
 
-for (const mode of ['multiple', 'echo', 'zero-only', 'repeated']) test(`${mode} keyboard-interactive prompts fail closed`, async () => {
+for (const mode of ['multiple', 'echo', 'zero-only', 'zero-hidden', 'repeated']) test(`${mode} keyboard-interactive prompts fail closed`, async () => {
   const server = await passwordPeer(mode)
   try { await assert.rejects(() => doctor(server.profile), { code: 'AUTH_FAILED', message: 'SSH authentication failed; check the selected credential.' }) }
   finally { await server.close() }
@@ -196,6 +196,16 @@ test('password echoed by a remote command is withheld', async () => {
     assert.equal(result.outcome, 'failed')
     assert.equal(result.stdout.text, '')
     assert.equal(result.stdout.withheld, true)
+    assert.equal(JSON.stringify(result).includes(password), false)
+  } finally { await server.close() }
+})
+
+test('password concealed by terminal controls is withheld', async () => {
+  const server = await passwordPeer('sanitized')
+  try {
+    const result = await executeCommand(server.profile, { command: 'fixture', timeout: 1, outputLimit: 1024 })
+    assert.equal(result.stdout.withheld, true)
+    assert.equal(result.stdout.text, '')
     assert.equal(JSON.stringify(result).includes(password), false)
   } finally { await server.close() }
 })
