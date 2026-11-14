@@ -15,21 +15,24 @@ export interface Profile {
   allowedAddresses: string[]
   privateKey?: SecretRef
   passphrase?: SecretRef
+  password?: SecretRef
 }
 export interface Configuration { version: 1, defaultProfile?: string, profiles: Record<string, Profile> }
-export function profileSecrets(profile: Profile, first?: 'passphrase') {
+export function profileSecrets(profile: Profile, first?: 'passphrase' | 'status') {
   const definitions = [
     { name: 'privateKey', fallback: 'SSH_AXI_PRIVATE_KEY', required: true },
     { name: 'passphrase', fallback: 'SSH_AXI_PASSPHRASE', required: false },
+    { name: 'password', fallback: 'SSH_AXI_PASSWORD', required: true },
   ] as const
+  const selected = definitions.filter(secret => profile.password ? secret.name === 'password' : secret.name !== 'password')
   const resolve = ({ name, fallback, required }: typeof definitions[number]) => {
     const reference = profile[name] ?? { env: fallback }
-    return { name, required, reference, value: resolveSecret(reference, fallback, required),
+    return { name, required, reference, value: resolveSecret(reference, fallback, first === 'status' ? false : required, first === 'status' && required),
       source: 'file' in reference ? 'protected file' : `env:${reference.env}` }
   }
-  const prioritized = definitions.find(secret => secret.name === first)
+  const prioritized = selected.find(secret => secret.name === first)
   const resolved = prioritized && resolve(prioritized)
-  return definitions.map(secret => secret === prioritized ? resolved! : resolve(secret))
+  return selected.map(secret => secret === prioritized ? resolved! : resolve(secret))
 }
 
 const validate = new Ajv({ strict: false }).compile<Profile>(schema)
@@ -114,13 +117,15 @@ export function selectProfile(config: Configuration, explicit?: string): { name:
     if (!profile) throw new SshError('NOT_FOUND', 'Host not found.')
     return { name, profile }
   }
-  const fields = ['ADDRESS', 'PORT', 'USERNAME', 'APPROVED_HOST_KEYS', 'ALLOWED_ADDRESSES', 'PRIVATE_KEY', 'PASSPHRASE']
+  const fields = ['ADDRESS', 'PORT', 'USERNAME', 'APPROVED_HOST_KEYS', 'ALLOWED_ADDRESSES', 'PRIVATE_KEY', 'PASSPHRASE', 'PASSWORD']
   if (fields.some(field => process.env[`SSH_AXI_${field}`] !== undefined)) {
     let value: unknown
     try {
       value = { address: process.env.SSH_AXI_ADDRESS, port: Number(process.env.SSH_AXI_PORT), username: process.env.SSH_AXI_USERNAME,
         approvedHostKeys: JSON.parse(process.env.SSH_AXI_APPROVED_HOST_KEYS ?? 'null'),
-        allowedAddresses: JSON.parse(process.env.SSH_AXI_ALLOWED_ADDRESSES ?? 'null'), privateKey: { env: 'SSH_AXI_PRIVATE_KEY' },
+        allowedAddresses: JSON.parse(process.env.SSH_AXI_ALLOWED_ADDRESSES ?? 'null'),
+        ...(process.env.SSH_AXI_PASSWORD === undefined || process.env.SSH_AXI_PRIVATE_KEY !== undefined ? { privateKey: { env: 'SSH_AXI_PRIVATE_KEY' } } : {}),
+        ...(process.env.SSH_AXI_PASSWORD === undefined ? {} : { password: { env: 'SSH_AXI_PASSWORD' } }),
         ...(process.env.SSH_AXI_PASSPHRASE === undefined ? {} : { passphrase: { env: 'SSH_AXI_PASSPHRASE' } }) }
     } catch { throw new SshError('CONFIG_INVALID', 'A complete environment profile is required.') }
     return { name: 'env', profile: validateProfile(value) }
@@ -130,14 +135,17 @@ export function selectProfile(config: Configuration, explicit?: string): { name:
   return { name: selected, profile: config.profiles[selected]! }
 }
 
-export function resolveSecret(reference: SecretRef | undefined, fallback: string, required: boolean): string | undefined {
+export function resolveSecret(reference: SecretRef | undefined, fallback: string, required: boolean, missingFileAllowed = false): string | undefined {
   const selected = reference ?? { env: fallback }
   let value: string | undefined
   try { value = 'env' in selected ? process.env[selected.env] : readPrivateFile(selected.file, true) }
   catch (error) {
+    if (missingFileAllowed && (error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     if (error instanceof SshError) throw error
     throw new SshError('KEY_UNAVAILABLE', 'The selected protected secret file is unavailable.')
   }
-  if (!value && required) throw new SshError('KEY_UNAVAILABLE', 'The selected private key is unavailable.')
+  if (required && (value === undefined || value === '' && fallback !== 'SSH_AXI_PASSWORD')) {
+    throw new SshError('KEY_UNAVAILABLE', 'The selected credential is unavailable.')
+  }
   return value
 }

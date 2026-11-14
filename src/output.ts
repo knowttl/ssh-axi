@@ -27,6 +27,7 @@ export function checkCommand(command: string, secrets: readonly string[]): void 
 export class Output {
   private readonly decoder = new TextDecoder('utf-8')
   private tail = ''
+  private safeTail = ''
   private text = ''
   private terminal: 'text' | 'escape' | 'csi' | 'osc' | 'oscEscape' = 'text'
   private readonly window: number
@@ -50,9 +51,6 @@ export class Output {
     const scan = this.tail + value
     this.withheld ||= containsSecret(scan, this.patterns)
     this.tail = scan.slice(-this.window)
-    if (this.withheld) { this.text = ''; this.retainedBytes = 0; return }
-    // Once a codepoint does not fit, later chunks cannot extend the prefix.
-    if (this.truncated) return
     // Escape sequences can span chunks. Keep only the parser state, never an
     // unbounded pending OSC title or CSI parameter string.
     let safe = ''
@@ -69,6 +67,11 @@ export class Output {
       else if (character === '\x9d') this.terminal = 'osc'
       else if (!/[\x00-\x08\x0b-\x1f\x7f-\x9f]/.test(character)) safe += character
     }
+    const safeScan = this.safeTail + safe
+    this.withheld ||= containsSecret(safeScan, this.patterns)
+    this.safeTail = safeScan.slice(-this.window)
+    if (this.withheld) { this.text = ''; this.retainedBytes = 0; return }
+    if (this.truncated) return
     const bytes = Buffer.from(safe)
     const remaining = this.limit - this.retainedBytes
     let end = Math.min(bytes.length, remaining)

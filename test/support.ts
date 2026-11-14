@@ -20,7 +20,8 @@ const host = ssh2.utils.parseKey(hostPrivateKey)
 if (host instanceof Error || Array.isArray(host)) throw new Error('Cannot generate the disposable host key')
 export const hostKey = `${host.type} ${host.getPublicSSH().toString('base64')}`
 
-export async function peer(stall = false, address = '127.0.0.1', port = 0, execute?: (command: string, stream: ssh2.ServerChannel, session: ssh2.Session, transportId: number) => void) {
+export async function peer(stall = false, address = '127.0.0.1', port = 0, execute?: (command: string, stream: ssh2.ServerChannel, session: ssh2.Session, transportId: number) => void,
+  authenticate?: (context: ssh2.AuthContext) => void) {
   const observations = { transports: 0, auth: 0, commands: 0, channels: 0, closed: 0, addresses: [] as string[], commandBytes: [] as string[], signals: [] as string[] }
   let observedAuth: (() => void) | undefined
   let observedClose: (() => void) | undefined
@@ -37,6 +38,7 @@ export async function peer(stall = false, address = '127.0.0.1', port = 0, execu
       observations.auth++
       observedAuth!()
       if (stall) return
+      if (authenticate) { authenticate(context); return }
       if (context.method === 'publickey' && context.username === 'ordinary'
         && context.key.data.equals(publicKey) && (!context.signature || signingKey.verify(context.blob!, context.signature, context.hashAlgo) === true)) context.accept()
       else context.reject(['publickey'])

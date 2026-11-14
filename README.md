@@ -1,6 +1,6 @@
 # ssh-axi
 
-Agent-facing SSH CLI: discover approved hosts, check encrypted-key authentication and run confirmed, bounded commands.
+Agent-facing SSH CLI: discover approved hosts, check key or password authentication and run confirmed, bounded commands.
 Arbitrary execution always requires explicit confirmation.
 
 [Quickstart](#quickstart) | [Commands](#commands) | [Safety](#safety) | [Configuration](#configuration) | [Output and exit codes](#output-and-exit-codes) | [Limitations](#limitations) | [Development](#development)
@@ -200,12 +200,20 @@ Server keys require independent verification, and at most two approved keys may 
 
 ### Credentials
 
-Keys and passphrases accept environment or protected-file SecretRefs only.
+Keys, passphrases and passwords accept environment or protected-file SecretRefs only.
 Secret values and inline private keys are refused in JSON and arguments.
-An omitted private-key reference defaults to `SSH_AXI_PRIVATE_KEY`, and the passphrase defaults to `SSH_AXI_PASSPHRASE`.
+Each profile requires exactly one of `privateKey` or `password`.
+The optional `passphrase` is allowed only with `privateKey` and defaults to `SSH_AXI_PASSPHRASE`.
+For password authentication, replace the key and passphrase references with `"password": {"env": "SSH_AXI_PASSWORD"}` or a protected-file reference.
+Password authentication supports the SSH password method and keyboard-interactive rounds containing exactly one hidden prompt.
+Zero-prompt exchanges may precede a single hidden prompt, but authentication without a hidden prompt fails with `AUTH_FAILED`.
+Multiple prompts, echo-on prompts and repeated password challenges also fail with `AUTH_FAILED`.
+Password-change requests fail with `PASSWORD_EXPIRED`; change the password outside ssh-axi.
+Passwords have no minimum length.
+Short passwords can cause command refusals and withheld output whenever their text occurs in commands or output.
 File SecretRefs remove a leading BOM and all trailing whitespace, as required by AXI Credential Standard v2.
 Environment SecretRefs preserve the variable's exact string.
-A file SecretRef therefore cannot preserve a passphrase that ends in whitespace; use an environment SecretRef for that passphrase.
+A file SecretRef therefore cannot preserve a passphrase or password that ends in whitespace; use an environment SecretRef for that secret.
 `auth status` reports credential availability and sources as `env:<name>` or `protected file`.
 It does not display secret values or file paths, and does not check network authentication.
 Linux secret files must be owned by the caller, regular, protected from group and other access and reachable through protected directories without symlinks.
@@ -217,7 +225,7 @@ Precedence is explicit host or `--profile`, `SSH_AXI_PROFILE`, environment profi
 An explicitly selected file profile ignores competing endpoint environment fields.
 Environment profiles use `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME`, JSON arrays in `SSH_AXI_APPROVED_HOST_KEYS` and `SSH_AXI_ALLOWED_ADDRESSES`, and the secret environment fields above.
 Partial environment profiles fail.
-Without an explicit host, `--profile` or `SSH_AXI_PROFILE`, setting even just `SSH_AXI_PRIVATE_KEY` or `SSH_AXI_PASSPHRASE` selects the environment-profile path.
+Without an explicit host, `--profile` or `SSH_AXI_PROFILE`, setting even just `SSH_AXI_PRIVATE_KEY`, `SSH_AXI_PASSPHRASE` or `SSH_AXI_PASSWORD` selects the environment-profile path.
 Missing endpoint or trust fields then cause `CONFIG_INVALID` in `doctor` and `auth status`, even when a default or sole file profile exists.
 Use `--profile <name>` or set `SSH_AXI_PROFILE` when a file profile relies on those credential fallbacks, for example `ssh-axi auth status --profile <name>` or `ssh-axi doctor --profile <name>`.
 
@@ -229,7 +237,7 @@ Use `--profile <name>` or set `SSH_AXI_PROFILE` when a file profile relies on th
 | `SSH_AXI_PROFILE` | Profile name to select |
 | `SSH_AXI_ADDRESS`, `SSH_AXI_PORT`, `SSH_AXI_USERNAME` | Environment profile endpoint |
 | `SSH_AXI_APPROVED_HOST_KEYS`, `SSH_AXI_ALLOWED_ADDRESSES` | JSON arrays for an environment profile |
-| `SSH_AXI_PRIVATE_KEY`, `SSH_AXI_PASSPHRASE` | Default private-key and passphrase references |
+| `SSH_AXI_PRIVATE_KEY`, `SSH_AXI_PASSPHRASE`, `SSH_AXI_PASSWORD` | Environment-profile key, optional passphrase or password; key and password are mutually exclusive |
 | `SSH_AXI_READ_ONLY` | `true` rejects arbitrary execution |
 | `SSH_AXI_WRITE_LOG` | Absolute protected command journal path |
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME` | Absolute base directories |
