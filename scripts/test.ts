@@ -31,7 +31,7 @@ if (privateTmp.status !== 0) process.exit(1)
     const commands: [string, string[]][] = [
       [process.execPath, [process.env.npm_execpath!, 'pack', '--pack-destination', root]],
       [process.execPath, [process.env.npm_execpath!, '--dir', prefix, 'add', '--offline', '--prod', tarball]],
-      [process.execPath, ['--test', ...(process.argv.length > 3 ? process.argv.slice(3) : ['test/package-contract.test.ts', 'test/native.test.ts', 'test/authentication.test.ts', 'test/execution.test.ts', 'test/artium.test.ts', 'test/journey.test.ts'])]],
+      [process.execPath, ['--test', ...(process.argv.length > 3 ? process.argv.slice(3) : ['test/package-contract.test.ts', 'test/native.test.ts', 'test/authentication.test.ts', 'test/execution.test.ts', 'test/profile-secrets.test.ts', 'test/artium.test.ts', 'test/journey.test.ts'])]],
     ]
     for (const [command, args] of commands) {
       const result = spawnSync(command, args, { stdio: 'inherit', env: { ...process.env, SSH_AXI_TEST_PREFIX: prefix, SSH_AXI_TEST_TARBALL: tarball } })

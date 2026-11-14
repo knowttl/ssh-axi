@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { executeCommand } from './doctor.js'
 import { checkCommand } from './output.js'
-import { openPrivateFile, resolveSecret, type Profile } from './profile.js'
+import { openPrivateFile, profileSecrets, type Profile } from './profile.js'
 import { SshError } from './errors.js'
 import type { parseArguments } from './arguments.js'
 
@@ -36,7 +36,7 @@ export async function executeNative(host: string, profile: Profile, parsed: Retu
   if (parsed.values.sudo || parsed.values.detach || parsed.values['request-key'] || parsed.values.connection) throw new SshError('HOSTED_REQUIRED', 'This option requires a managed execution and matching host grants.')
   if (typeof parsed.values.command !== 'string') throw new SshError('USAGE', 'Use --command <text> --confirm.', 2)
   const command = parsed.values.command
-  checkCommand(command, [resolveSecret(profile.privateKey, 'SSH_AXI_PRIVATE_KEY', true)!, resolveSecret(profile.passphrase, 'SSH_AXI_PASSPHRASE', false) ?? ''])
+  checkCommand(command, profileSecrets(profile).map(secret => secret.value ?? ''))
   const descriptor = openWriteJournal()
   const id = `exec_${randomUUID()}`
   const startedAt = new Date().toISOString()
