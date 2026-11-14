@@ -97,7 +97,7 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
           finish(new SshError('AUTH_FAILED', 'SSH authentication failed; check the selected credential.')); return
         }
         answered = true
-        answer([password])
+        answer(resolved.filter(secret => secret.name === 'password').map(secret => secret.value!))
       })
       signal?.addEventListener('abort', abort, { once: true })
       if (signal?.aborted) { abort(); return }
@@ -127,15 +127,6 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
             trusted = profile.approvedHostKeys.some(value => Buffer.from(value.split(' ')[1]!, 'base64').equals(key))
             return trusted
           } })
-        const transport = client as ssh2.Client & { _protocol: { _handlers: {
-          USERAUTH_INFO_REQUEST: (protocol: unknown, name: string, instructions: string, prompts: { prompt: string, echo: boolean }[]) => void
-        } } }
-        const handlers = transport._protocol._handlers
-        const infoRequest = handlers.USERAUTH_INFO_REQUEST
-        handlers.USERAUTH_INFO_REQUEST = (protocol, name, instructions, prompts) => {
-          if (prompts.length === 0) { failure(); return }
-          infoRequest(protocol, name, instructions, prompts)
-        }
       })().catch(() => finish(new SshError('AUTH_FAILED', 'SSH authentication failed; check the selected credential.')))
     })
   } finally { privateKey?.fill(0) }

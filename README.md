@@ -206,7 +206,8 @@ Each profile requires exactly one of `privateKey` or `password`.
 The optional `passphrase` is allowed only with `privateKey` and defaults to `SSH_AXI_PASSPHRASE`.
 For password authentication, replace the key and passphrase references with `"password": {"env": "SSH_AXI_PASSWORD"}` or a protected-file reference.
 Password authentication supports the SSH password method and keyboard-interactive rounds containing exactly one hidden prompt.
-Zero-prompt exchanges, multiple prompts, echo-on prompts and repeated password challenges fail with `AUTH_FAILED`.
+Zero-prompt exchanges may precede a single hidden prompt, but authentication without a hidden prompt fails with `AUTH_FAILED`.
+Multiple prompts, echo-on prompts and repeated password challenges also fail with `AUTH_FAILED`.
 Password-change requests fail with `PASSWORD_EXPIRED`; change the password outside ssh-axi.
 Passwords have no minimum length.
 Short passwords can cause command refusals and withheld output whenever their text occurs in commands or output.

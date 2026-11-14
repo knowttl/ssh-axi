@@ -75,7 +75,7 @@ test('one-character password permits safe doctor and execution results', async (
   } finally { await server.close() }
 })
 
-for (const mode of ['password', 'empty', 'hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
+for (const mode of ['password', 'empty', 'hidden', 'zero-hidden']) test(`${mode} authentication succeeds through the private worker`, async () => {
   const server = await passwordPeer(mode)
   try {
     assert.deepEqual(await doctor(server.profile), { authenticated: true, address: '127.0.0.1' })
@@ -83,7 +83,7 @@ for (const mode of ['password', 'empty', 'hidden']) test(`${mode} authentication
   } finally { await server.close() }
 })
 
-for (const mode of ['multiple', 'echo', 'zero-only', 'zero-hidden', 'repeated']) test(`${mode} keyboard-interactive prompts fail closed`, async () => {
+for (const mode of ['multiple', 'echo', 'zero-only', 'repeated']) test(`${mode} keyboard-interactive prompts fail closed`, async () => {
   const server = await passwordPeer(mode)
   try { await assert.rejects(() => doctor(server.profile), { code: 'AUTH_FAILED', message: 'SSH authentication failed; check the selected credential.' }) }
   finally { await server.close() }
@@ -232,7 +232,8 @@ test('empty key and password status reflect authentication availability', async 
   try {
     const empty = join(scratch.root, 'empty')
     await writeFile(empty, '', { mode: 0o600 })
-    const key = { ...server.profile, password: undefined, privateKey: { env: 'TEST_EMPTY_PASSWORD' } }
+    const { password: _password, ...endpoint } = server.profile
+    const key = { ...endpoint, privateKey: { env: 'TEST_EMPTY_PASSWORD' } }
     const path = await configuration(scratch.root, { key, keyfile: { ...key, privateKey: { file: empty } },
       password: { ...server.profile, password: { env: 'TEST_EMPTY_PASSWORD' } }, passwordfile: { ...server.profile, password: { file: empty } } })
     for (const [profile, field, expected] of [['key', 'privateKey', 'missing'], ['keyfile', 'privateKey', 'missing'],
@@ -249,7 +250,8 @@ test('status reports missing required files but rejects a missing passphrase fil
   const scratch = await temporary()
   try {
     const missing = { file: join(scratch.root, 'missing') }
-    const key = { ...server.profile, password: undefined, privateKey: { env: 'TEST_PRIVATE_KEY' } }
+    const { password: _password, ...endpoint } = server.profile
+    const key = { ...endpoint, privateKey: { env: 'TEST_PRIVATE_KEY' } }
     const path = await configuration(scratch.root, { key: { ...key, privateKey: missing },
       password: { ...server.profile, password: missing }, passphrase: { ...key, passphrase: missing } })
     for (const [profile, field, expected] of [['key', 'privateKey', 'missing'], ['password', 'password', 'missing'],
