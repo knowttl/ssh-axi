@@ -116,9 +116,9 @@ Hosted connections:
 - Are fenced on revocation: affected workers stop and their private profiles are removed before acknowledgement.
 - Are discarded on server restart, which removes abandoned private directories and retains unproven executions as uncertain without replay.
 
-Sudo dispatch sends `sudo -n -- /bin/sh -c <quoted-command>` through its own matching connection.
+Key-based sudo dispatch sends `sudo -n -- /bin/sh -c <quoted-command>` through its own matching connection.
 Pipelines and redirects remain inside that privileged shell.
-Password-required or terminal-required sudo returns `SUDO_DENIED` with administrator guidance.
+For key-based sudo, password-required or terminal-required sudo returns `SUDO_DENIED` with administrator guidance.
 
 The hosted execution settings and revision 2 connection worker accept `sudoPassword: true` for password sudo bindings.
 For Artium A3, the caller supplies the original command, and ssh-axi checks it for protected material before generating two distinct, fresh, unpredictable nonces and wrapping it as `sudo -S -k -p '<prompt>' -- /bin/sh -c 'printf %s <success>; exec </dev/null; <command>'` with proper shell quoting.
