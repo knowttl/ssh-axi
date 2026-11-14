@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/knowttl/ssh-axi/compare/ssh-axi-v0.1.2...ssh-axi-v0.1.3) (2026-11-14)
+
+
+### Features
+
+* support password authentication ([#27](https://github.com/knowttl/ssh-axi/issues/27)) ([038d709](https://github.com/knowttl/ssh-axi/commit/038d70973937bf7ac6e41055f3a65f7502c0efbb))
+
 ## [0.1.2](https://github.com/knowttl/ssh-axi/compare/ssh-axi-v0.1.1...ssh-axi-v0.1.2) (2026-11-02)
 
 
