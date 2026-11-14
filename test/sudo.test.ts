@@ -112,7 +112,7 @@ test('short passwords work across repeated password sudo executions', async () =
   const server = await peer(false, '127.0.0.1', 0, (command, stream) => {
     const [, prompt, success] = /^sudo -S -k -p (\S+) -- \/bin\/sh -c 'printf %s (\S+);/.exec(command)!
     let input = ''
-    stream.on('data', bytes => { input += String(bytes) })
+    stream.on('data', (bytes: Buffer) => { input += String(bytes) })
     stream.on('end', () => {
       assert.equal(input, 'a\n')
       inputs++
@@ -141,7 +141,7 @@ for (const repeated of [false, true]) test(`cancellation ignores a ${repeated ? 
   let input = ''
   const server = await peer(false, '127.0.0.1', 0, (command, stream, session) => {
     const prompt = /^sudo -S -k -p (\S+) /.exec(command)![1]!
-    stream.on('data', bytes => { input += String(bytes) })
+    stream.on('data', (bytes: Buffer) => { input += String(bytes) })
     stream.on('end', () => { if (repeated) admitted() })
     session.on('signal', () => { stream.stderr.write(prompt); stream.exit('TERM'); stream.end() })
     if (repeated) stream.stderr.write(prompt)
