@@ -1,4 +1,5 @@
 import { lookup } from 'node:dns/promises'
+import { randomBytes } from 'node:crypto'
 import { BlockList, isIP, connect, type Socket } from 'node:net'
 import ssh2 from 'ssh2'
 import { SshError } from './errors.js'
@@ -8,7 +9,7 @@ import { checkCommand, containsSecret, Output, secretPatterns } from './output.j
 export const AUTHENTICATION_DEADLINE_MS = 15_000
 export const OUTPUT_WITHHELD = 'Protected output withheld.'
 export const OUTPUT_FLOOD = 'Output flood limit exceeded; inspect remote state before retrying.'
-export interface ExecutionSettings { command: string, timeout: number, outputLimit: number }
+export interface ExecutionSettings { command: string, timeout: number, outputLimit: number, sudoPassword?: boolean }
 export interface ExecutionResult {
   address: string
   outcome: 'completed' | 'failed' | 'cancelled' | 'timed_out' | 'unknown'
@@ -41,6 +42,7 @@ function validateSettings(settings: ExecutionSettings) {
     || !Number.isInteger(settings.outputLimit) || settings.outputLimit < 0 || settings.outputLimit > 1024 * 1024) {
     throw new SshError('USAGE', 'Timeout must be 1-600 seconds and output limit 0-1048576 bytes.', 2)
   }
+  if (settings.sudoPassword !== undefined && typeof settings.sudoPassword !== 'boolean') throw new SshError('USAGE', 'Sudo password mode must be a boolean.', 2)
 }
 
 // Each command starts a fresh channel. The private worker retains only the
@@ -137,8 +139,20 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
       if (active) throw new SshError('CONNECTION_BUSY', 'A command is already active on this connection.')
       validateSettings(settings)
       checkCommand(settings.command, secrets)
+      if (settings.sudoPassword && password === undefined) throw new SshError('USAGE', 'Sudo password input requires a password credential.', 2)
       if (signal?.aborted) throw new SshError('COMMAND_CANCELLED', 'Execution cancelled before dispatch.')
-      return new Promise(resolve => {
+      const nonce = (other?: string) => {
+        for (let attempt = 0; attempt < 128; attempt++) {
+          const value = randomBytes(24).toString('base64url')
+          if (value !== other && !containsSecret(value, patterns)) return value
+        }
+        throw new SshError('NONCE_FAILED', 'Cannot generate a sudo marker without protected material.')
+      }
+      const promptValue = settings.sudoPassword ? nonce() : undefined
+      const successValue = promptValue ? nonce(promptValue) : undefined
+      const shellCommand = successValue ? `printf %s ${successValue}; exec </dev/null; ${settings.command}` : ''
+      const command = promptValue ? `sudo -S -k -p ${promptValue} -- /bin/sh -c '${shellCommand.replaceAll("'", "'\\''")}'` : settings.command
+      return new Promise((resolve, reject) => {
         let finished = false
         let channel: ssh2.ClientChannel | undefined
         let remoteExit: number | null = null
@@ -146,6 +160,14 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
         let outcome: ExecutionResult['outcome'] = 'unknown'
         let diagnostic: string | undefined
         let grace: NodeJS.Timeout | undefined
+        let answeredSudo = false
+        let sudoDenied = false
+        let sudoSucceeded = false
+        let pendingPrompt = Buffer.alloc(0)
+        let pendingSuccess = Buffer.alloc(0)
+        let receivedBytes = 0
+        const prompt = promptValue === undefined ? undefined : Buffer.from(promptValue)
+        const success = successValue === undefined ? undefined : Buffer.from(successValue)
         const started = performance.now()
         const stdout = new Output(patterns, settings.outputLimit)
         const stderr = new Output(patterns, settings.outputLimit)
@@ -155,6 +177,9 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
           clearTimeout(deadline); clearTimeout(grace)
           signal?.removeEventListener('abort', abort)
           active = undefined
+          stderr.push(pendingPrompt)
+          stdout.push(pendingSuccess)
+          if (!grace && sudoDenied && !sudoSucceeded) { reject(new SshError('SUDO_DENIED', 'Sudo authentication failed; check the selected credential.')); return }
           const streams = { stdout: stdout.finish(), stderr: stderr.finish() }
           if (streams.stdout.withheld || streams.stderr.withheld || remoteSignal !== null && containsSecret(remoteSignal, patterns)) {
             remoteSignal = null
@@ -184,24 +209,58 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
         const deadline = setTimeout(() => cancel('timed_out'), settings.timeout * 1000)
         active = finish
         signal?.addEventListener('abort', abort, { once: true })
-        client.exec(settings.command, { pty: false }, (error, stream) => {
+        client.exec(command, { pty: false }, (error, stream) => {
           if (finished) { stream?.destroy(); return }
           if (error) { outcome = 'failed'; finish(); return }
           channel = stream
           if (grace) terminate()
-          const receive = (output: Output, bytes: Buffer) => {
-            output.push(bytes)
-            if (stdout.receivedBytes + stderr.receivedBytes > 16 * 1024 * 1024) cancel('unknown', OUTPUT_FLOOD)
+          const count = (bytes: Buffer) => {
+            receivedBytes += bytes.length
+            if (receivedBytes > 16 * 1024 * 1024) cancel('unknown', OUTPUT_FLOOD)
           }
-          stream.on('data', (bytes: Buffer) => receive(stdout, bytes))
-          stream.stderr.on('data', (bytes: Buffer) => receive(stderr, bytes))
+          stream.on('data', (bytes: Buffer) => {
+            count(bytes)
+            if (!success) { stdout.push(bytes); return }
+            pendingSuccess = Buffer.concat([pendingSuccess, bytes])
+            let match = pendingSuccess.indexOf(success)
+            while (match !== -1) {
+              stdout.push(pendingSuccess.subarray(0, match))
+              pendingSuccess = pendingSuccess.subarray(match + success.length)
+              sudoSucceeded = true
+              match = pendingSuccess.indexOf(success)
+            }
+            let retained = Math.min(pendingSuccess.length, success.length - 1)
+            while (retained > 0 && !pendingSuccess.subarray(-retained).equals(success.subarray(0, retained))) retained--
+            stdout.push(pendingSuccess.subarray(0, pendingSuccess.length - retained))
+            pendingSuccess = pendingSuccess.subarray(pendingSuccess.length - retained)
+          })
+          stream.stderr.on('data', (bytes: Buffer) => {
+            count(bytes)
+            if (!prompt) { stderr.push(bytes); return }
+            pendingPrompt = Buffer.concat([pendingPrompt, bytes])
+            let match = pendingPrompt.indexOf(prompt)
+            while (match !== -1) {
+              stderr.push(pendingPrompt.subarray(0, match))
+              pendingPrompt = pendingPrompt.subarray(match + prompt.length)
+              if (!grace) {
+                if (answeredSudo) { sudoDenied = true; stream.end() }
+                else { answeredSudo = true; stream.end(`${password!}\n`) }
+              }
+              match = pendingPrompt.indexOf(prompt)
+            }
+            let retained = Math.min(pendingPrompt.length, prompt.length - 1)
+            while (retained > 0 && !pendingPrompt.subarray(-retained).equals(prompt.subarray(0, retained))) retained--
+            stderr.push(pendingPrompt.subarray(0, pendingPrompt.length - retained))
+            pendingPrompt = pendingPrompt.subarray(pendingPrompt.length - retained)
+          })
           stream.on('exit', (code: number | null, name?: string) => { remoteExit = typeof code === 'number' ? code : null; remoteSignal = name ?? null })
           stream.on('error', () => { void close(); finish() })
           stream.on('close', () => {
             if (!grace) outcome = remoteExit === 0 ? 'completed' : remoteExit !== null || remoteSignal ? 'failed' : 'unknown'
+            if (!grace && answeredSudo && !sudoSucceeded && (remoteExit !== null || remoteSignal !== null)) sudoDenied = true
             finish()
           })
-          stream.end()
+          if (!prompt) stream.end()
         })
       })
     } }
