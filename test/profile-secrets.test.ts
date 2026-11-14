@@ -19,6 +19,27 @@ const workerResult = { address: '127.0.0.1', outcome: 'completed', remoteExit: 0
   stdout: { text: '', receivedBytes: 0, retainedBytes: 0, truncated: false, encodingLoss: false, withheld: false, unit: 'bytes' },
   stderr: { text: '', receivedBytes: 0, retainedBytes: 0, truncated: false, encodingLoss: false, withheld: false, unit: 'bytes' } }
 
+test('parent accepts the fixed flood diagnostic with a short password', async t => {
+  const server = await peer()
+  process.env.TEST_FLOOD_PASSWORD = 'e'
+  t.mock.method(childProcess, 'fork', () => {
+    const worker = new EventEmitter()
+    return Object.assign(worker, { connected: true, kill: () => true, send: () => {
+      queueMicrotask(() => {
+        worker.emit('message', { ok: true, result: { ...workerResult, outcome: 'unknown', diagnostic: 'Output flood limit exceeded; inspect remote state before retrying.' } })
+        worker.emit('exit', 0)
+      })
+    } }) as unknown as ChildProcess
+  })
+  syncBuiltinESMExports()
+  try {
+    const { privateKey: _key, passphrase: _phrase, ...endpoint } = server.profile
+    const result = await executeCommand({ ...endpoint, password: { env: 'TEST_FLOOD_PASSWORD' } }, { ...settings, command: 'id' })
+    assert.equal(result.outcome, 'unknown')
+    assert.equal(result.diagnostic, 'Output flood limit exceeded; inspect remote state before retrying.')
+  } finally { t.mock.restoreAll(); syncBuiltinESMExports(); delete process.env.TEST_FLOOD_PASSWORD; await server.close() }
+})
+
 for (const [name, value] of [['privateKey', Buffer.from(privateKey).toString('base64')], ['passphrase', passphrase]] as const) {
   for (const [site, invoke] of [
     ['transport admission', execute], ['supervisor admission', executeCommand],

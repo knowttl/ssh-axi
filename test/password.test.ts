@@ -16,15 +16,17 @@ const password = randomBytes(24).toString('hex')
 process.env.TEST_PASSWORD = password
 process.env.TEST_EMPTY_PASSWORD = ''
 process.env.TEST_SHORT_PASSWORD = 'a'
+process.env.TEST_DIAGNOSTIC_PASSWORD = 'e'
 
 async function passwordPeer(mode = 'password') {
   const server = await peer(false, '127.0.0.1', 0, (_command, stream) => {
-    stream.write(mode === 'short' ? 'public' : password); stream.exit(0); stream.end()
+    stream.write(mode === 'short' ? 'public' : mode === 'diagnostic' ? 'e' : password); stream.exit(0); stream.end()
   }, context => {
     if (context.method === 'password' && mode === 'expired') context.requestChange('untrusted prompt', () => context.reject())
     else if (context.method === 'password' && mode === 'password' && context.password === password) context.accept()
     else if (context.method === 'password' && mode === 'empty' && context.password === '') context.accept()
     else if (context.method === 'password' && mode === 'short' && context.password === 'a') context.accept()
+    else if (context.method === 'password' && mode === 'diagnostic' && context.password === 'e') context.accept()
     else if (context.method === 'keyboard-interactive' && mode !== 'password') {
       if (mode === 'zero-only') { context.prompt([], () => context.accept()); return }
       if (mode === 'zero-hidden') {
@@ -49,8 +51,19 @@ async function passwordPeer(mode = 'password') {
     } else context.reject(['password', 'keyboard-interactive'])
   })
   const { privateKey: _key, passphrase: _phrase, ...endpoint } = server.profile
-  return { ...server, profile: { ...endpoint, password: { env: mode === 'empty' ? 'TEST_EMPTY_PASSWORD' : mode === 'short' ? 'TEST_SHORT_PASSWORD' : 'TEST_PASSWORD' } } }
+  return { ...server, profile: { ...endpoint, password: { env: mode === 'empty' ? 'TEST_EMPTY_PASSWORD' : mode === 'short' ? 'TEST_SHORT_PASSWORD' : mode === 'diagnostic' ? 'TEST_DIAGNOSTIC_PASSWORD' : 'TEST_PASSWORD' } } }
 }
+
+test('withheld output is returned for a password in the fixed diagnostic', async () => {
+  const server = await passwordPeer('diagnostic')
+  try {
+    const result = await executeCommand(server.profile, { command: 'id', timeout: 1, outputLimit: 1024 })
+    assert.equal(result.outcome, 'failed')
+    assert.equal(result.stdout.withheld, true)
+    assert.equal(result.stdout.text, '')
+    assert.equal(result.diagnostic, 'Protected output withheld.')
+  } finally { await server.close() }
+})
 
 test('one-character password permits safe doctor and execution results', async () => {
   const server = await passwordPeer('short')

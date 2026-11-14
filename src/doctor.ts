@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SshError } from './errors.js'
 import { type Profile, profileSecrets } from './profile.js'
-import type { ExecutionResult, ExecutionSettings } from './authenticate.js'
+import { OUTPUT_FLOOD, OUTPUT_WITHHELD, type ExecutionResult, type ExecutionSettings } from './authenticate.js'
 import { checkCommand, containsSecret, secretPatterns } from './output.js'
 
 // Both native and hosted callers use this one-shot supervisor. Artium supplies
@@ -50,7 +50,8 @@ async function supervise(profile: Profile, settings?: ExecutionSettings, signal?
         const value = response as { ok?: boolean, result?: ExecutionResult, error?: { code: string, message: string } } | undefined
         if (value?.ok && value.result) {
           const result = value.result
-          if (settings && [result.stdout.text, result.stderr.text, result.remoteSignal ?? '', result.diagnostic ?? '']
+          const diagnostic = result.diagnostic === OUTPUT_WITHHELD || result.diagnostic === OUTPUT_FLOOD ? '' : result.diagnostic ?? ''
+          if (settings && [result.stdout.text, result.stderr.text, result.remoteSignal ?? '', diagnostic]
             .some(field => containsSecret(field, secretPatterns(values)))) {
             reject(new SshError('SECRET_IN_OUTPUT', 'Protected worker output withheld.'))
           } else resolve(value.result)

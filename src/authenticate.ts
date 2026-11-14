@@ -6,6 +6,8 @@ import { profileSecrets, type Profile } from './profile.js'
 import { checkCommand, containsSecret, Output, secretPatterns } from './output.js'
 
 export const AUTHENTICATION_DEADLINE_MS = 15_000
+export const OUTPUT_WITHHELD = 'Protected output withheld.'
+export const OUTPUT_FLOOD = 'Output flood limit exceeded; inspect remote state before retrying.'
 export interface ExecutionSettings { command: string, timeout: number, outputLimit: number }
 export interface ExecutionResult {
   address: string
@@ -158,7 +160,7 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
           if (streams.stdout.withheld || streams.stderr.withheld || remoteSignal !== null && containsSecret(remoteSignal, patterns)) {
             remoteSignal = null
             for (const stream of Object.values(streams)) { stream.text = ''; stream.retainedBytes = 0; stream.withheld = true }
-            diagnostic = 'Protected output withheld.'
+            diagnostic = OUTPUT_WITHHELD
             if (outcome === 'completed') outcome = 'failed'
           }
           resolve({ address, outcome, remoteExit, remoteSignal,
@@ -190,7 +192,7 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
           if (grace) terminate()
           const receive = (output: Output, bytes: Buffer) => {
             output.push(bytes)
-            if (stdout.receivedBytes + stderr.receivedBytes > 16 * 1024 * 1024) cancel('unknown', 'Output flood limit exceeded; inspect remote state before retrying.')
+            if (stdout.receivedBytes + stderr.receivedBytes > 16 * 1024 * 1024) cancel('unknown', OUTPUT_FLOOD)
           }
           stream.on('data', (bytes: Buffer) => receive(stdout, bytes))
           stream.stderr.on('data', (bytes: Buffer) => receive(stderr, bytes))
