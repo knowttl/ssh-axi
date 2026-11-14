@@ -9,9 +9,15 @@ for (const file of readdirSync(root, { recursive: true })) {
   const source = ts.createSourceFile(file, readFileSync(new URL(file, root), 'utf8'), ts.ScriptTarget.Latest, true)
   const secretName = (node: ts.Node): boolean => (ts.isIdentifier(node) || ts.isStringLiteral(node)) && names.has(node.text)
   const containsSecretName = (node: ts.Node): boolean => secretName(node) || ts.forEachChild(node, containsSecretName) === true
+  const authenticationMethods = (node: ts.ArrayLiteralExpression): boolean => {
+    const declaration = ts.isConditionalExpression(node.parent) ? node.parent.parent : node.parent
+    return ts.isVariableDeclaration(declaration) && declaration.type?.getText(source) === 'ssh2.AuthenticationType[]'
+      && node.elements.every(element => ts.isStringLiteral(element)
+        && ['publickey', 'password', 'keyboard-interactive'].includes(element.text))
+  }
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && node.text === 'resolveSecret'
-      || ts.isArrayLiteralExpression(node) && node.elements.some(containsSecretName)) {
+      || ts.isArrayLiteralExpression(node) && !authenticationMethods(node) && node.elements.some(containsSecretName)) {
       const { line } = source.getLineAndCharacterOfPosition(node.getStart(source))
       throw new Error(`${file}:${line + 1}: derive protected secret lists through profileSecrets()`)
     }

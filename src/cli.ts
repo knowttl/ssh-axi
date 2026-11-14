@@ -44,9 +44,9 @@ export async function main(args: readonly string[]): Promise<void> {
     }
     if (parsed.command === 'host show') { output({ host: projection(selected.name, selected.profile) }); return }
     if (parsed.command === 'auth status') {
-      const secrets = profileSecrets(selected.profile)
+      const secrets = profileSecrets(selected.profile, 'status')
       output({ profile: selected.name,
-        ...Object.fromEntries(secrets.map(secret => [secret.name, secret.value ? 'available' : secret.required ? 'missing' : 'absent'])),
+        ...Object.fromEntries(secrets.map(secret => [secret.name, secret.value !== undefined ? 'available' : secret.required ? 'missing' : 'absent'])),
         ...Object.fromEntries(secrets.map(secret => [`${secret.name}Source`, secret.source])), network: 'not checked' })
       return
     }

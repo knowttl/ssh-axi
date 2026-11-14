@@ -45,8 +45,10 @@ function validateSettings(settings: ExecutionSettings) {
 // authenticated transport and its lifetime secret protection between commands.
 export async function openTransport(profile: Profile, signal?: AbortSignal) {
   const resolved = profileSecrets(profile, 'passphrase')
-  const passphrase = resolved.find(secret => secret.name === 'passphrase')!.value
-  const privateKey = Buffer.from(resolved.find(secret => secret.name === 'privateKey')!.value!)
+  const passphrase = resolved.find(secret => secret.name === 'passphrase')?.value
+  const key = resolved.find(secret => secret.name === 'privateKey')?.value
+  const privateKey = key === undefined ? undefined : Buffer.from(key)
+  const password = resolved.find(secret => secret.name === 'password')?.value
   const secrets = resolved.map(secret => secret.value ?? '')
   const patterns = secretPatterns(secrets)
   const client = new ssh2.Client()
@@ -77,11 +79,24 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
         else resolve()
       }
       const failure = () => finish(new SshError(trusted ? 'AUTH_FAILED' : 'TRUST_FAILED',
-        trusted ? 'SSH key authentication failed; check the selected key and passphrase.' : 'SSH host trust could not be established.'))
+        trusted ? 'SSH authentication failed; check the selected credential.' : 'SSH host trust could not be established.'))
       const abort = () => finish(new SshError('COMMAND_CANCELLED', 'Connection cancelled before dispatch.'))
       const deadline = setTimeout(() => finish(new SshError('AUTH_TIMEOUT', 'SSH authentication exceeded 15 seconds.')), AUTHENTICATION_DEADLINE_MS)
-      client.once('ready', () => finish())
+      let method: ssh2.AuthenticationType | undefined
+      let answered = false
+      client.once('ready', () => {
+        if (method === 'keyboard-interactive' && !answered) { failure(); return }
+        finish()
+      })
       client.once('error', failure); client.once('close', failure)
+      client.on('change password', () => finish(new SshError('PASSWORD_EXPIRED', 'The SSH password must be changed before authentication.')))
+      client.on('keyboard-interactive', (_name, _instructions, _language, prompts, answer) => {
+        if (password === undefined || answered || prompts.length !== 1 || prompts[0]!.echo !== false) {
+          finish(new SshError('AUTH_FAILED', 'SSH authentication failed; check the selected credential.')); return
+        }
+        answered = true
+        answer(secrets)
+      })
       signal?.addEventListener('abort', abort, { once: true })
       if (signal?.aborted) { abort(); return }
       void (async () => {
@@ -96,15 +111,23 @@ export async function openTransport(profile: Profile, signal?: AbortSignal) {
         address = addresses[0]!.address
         socket = connect({ host: address, port: profile.port, family: addresses[0]!.family })
         socket.on('error', () => finish(new SshError('CONNECTION_FAILED', 'Cannot connect to the approved SSH endpoint.')))
-        client.connect({ sock: socket, username: profile.username, privateKey,
+        const methods: ssh2.AuthenticationType[] = password === undefined ? ['publickey'] : ['password', 'keyboard-interactive']
+        let attempt = 0
+        client.connect({ sock: socket, username: profile.username,
+          ...(privateKey === undefined ? {} : { privateKey }),
           ...(passphrase === undefined ? {} : { passphrase }), readyTimeout: AUTHENTICATION_DEADLINE_MS,
-          authHandler: ['publickey'], hostVerifier: (key: Buffer) => {
+          ...(password === undefined ? {} : { password }),
+          authHandler: (_remaining, partial, next) => {
+            method = methods[attempt++]
+            if (!method || partial) return false
+            next(method)
+          }, hostVerifier: (key: Buffer) => {
             trusted = profile.approvedHostKeys.some(value => Buffer.from(value.split(' ')[1]!, 'base64').equals(key))
             return trusted
           } })
-      })().catch(() => finish(new SshError('AUTH_FAILED', 'Cannot authenticate with the selected endpoint and encrypted key.')))
+      })().catch(() => finish(new SshError('AUTH_FAILED', 'SSH authentication failed; check the selected credential.')))
     })
-  } finally { privateKey.fill(0) }
+  } finally { privateKey?.fill(0) }
 
   return { address, disconnected, close,
     execute(settings: ExecutionSettings, signal?: AbortSignal): Promise<ExecutionResult> {
