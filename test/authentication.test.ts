@@ -1,9 +1,26 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { authenticate } from '../dist/authenticate.js'
-import { peer, privateKey, passphrase } from './support.ts'
+import { authenticate, execute, openTransport } from '../dist/authenticate.js'
+import { peer, privateKey, passphrase, temporary } from './support.ts'
 import dns from 'node:dns/promises'
 import { syncBuiltinESMExports } from 'node:module'
+import { chmod, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+test('transport and command admission preserve secret failure precedence', async () => {
+  const scratch = await temporary()
+  try {
+    const file = join(scratch.root, 'passphrase')
+    await writeFile(file, 'fixture')
+    await chmod(file, 0o644)
+    const profile = { address: '127.0.0.1', port: 22, username: 'fixture', approvedHostKeys: [], allowedAddresses: ['127.0.0.1'],
+      privateKey: { file: join(scratch.root, 'missing') }, passphrase: { file } }
+    for (const [invoke, code] of [
+      [() => openTransport(profile), 'CONFIG_INSECURE'],
+      [() => execute(profile, { command: 'true', timeout: 1, outputLimit: 1024 }), 'KEY_UNAVAILABLE'],
+    ] as const) await assert.rejects(invoke, { code })
+  } finally { await scratch.close() }
+})
 
 test('a stalled peer is disconnected at the 15-second authentication deadline', async context => {
   process.env.TEST_PRIVATE_KEY = privateKey

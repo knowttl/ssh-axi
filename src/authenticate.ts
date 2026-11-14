@@ -44,7 +44,7 @@ function validateSettings(settings: ExecutionSettings) {
 // Each command starts a fresh channel. The private worker retains only the
 // authenticated transport and its lifetime secret protection between commands.
 export async function openTransport(profile: Profile, signal?: AbortSignal) {
-  const resolved = profileSecrets(profile)
+  const resolved = profileSecrets(profile, 'passphrase')
   const passphrase = resolved.find(secret => secret.name === 'passphrase')!.value
   const privateKey = Buffer.from(resolved.find(secret => secret.name === 'privateKey')!.value!)
   const secrets = resolved.map(secret => secret.value ?? '')
